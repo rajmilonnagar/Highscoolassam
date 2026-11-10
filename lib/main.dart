@@ -225,6 +225,10 @@ String pdfUrl(String url) {
 
 final _db = Supabase.instance.client;
 
+/// true: YouTube video seedha watch page se chalta hai (embed error nahi aata).
+/// false: YouTube embed player (abhi 152-4 error de raha hai).
+const bool kYoutubeWatchPage = true;
+
 // ---------------------------------------------------------------------------
 // Generic grid screen: naam + photo wali kisi bhi list ke liye
 // ---------------------------------------------------------------------------
@@ -670,15 +674,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     }
 
     final yt = youtubeId(widget.url);
-    if (yt != null) {
+    if (yt != null && kYoutubeWatchPage) {
+      // YouTube ka embed 152-4 error deta hai, isliye seedha watch page kholte hain.
+      _c.loadRequest(Uri.parse('https://m.youtube.com/watch?v=$yt'));
+    } else if (yt != null) {
       // rel=0: sirf aapke channel ke suggestions, fs=0: YouTube ka fullscreen button nahi
       final html = '''
 <html><body style="margin:0;background:#000">
 <iframe style="position:fixed;inset:0;width:100%;height:100%;border:0"
- src="https://www.youtube.com/embed/$yt?autoplay=1&rel=0&playsinline=1&fs=0&modestbranding=1&enablejsapi=1&origin=https://highschoolassam.app"
+ src="https://www.youtube.com/embed/$yt?autoplay=1&rel=0&playsinline=1&fs=0&modestbranding=1&enablejsapi=1&origin=https://com.highschool.assam"
  allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
 </body></html>''';
-      _c.loadHtmlString(html, baseUrl: 'https://highschoolassam.app');
+      _c.loadHtmlString(html, baseUrl: 'https://com.highschool.assam');
     } else {
       _c.loadRequest(Uri.parse(videoUrl(widget.url)));
     }
