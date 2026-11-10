@@ -243,6 +243,7 @@ class ItemGridScreen extends StatefulWidget {
   final IconData fallbackIcon;
   final int columns;
   final double aspect;
+  final bool listStyle; // true: ek ke neeche ek, number + photo + naam wali list
 
   const ItemGridScreen({
     super.key,
@@ -253,6 +254,7 @@ class ItemGridScreen extends StatefulWidget {
     this.fallbackIcon = Icons.menu_book,
     this.columns = 2,
     this.aspect = 0.9,
+    this.listStyle = false,
   });
 
   @override
@@ -297,6 +299,86 @@ class _ItemGridScreenState extends State<ItemGridScreen> {
           final items = snap.data ?? [];
           if (items.isEmpty) {
             return _Message(text: 'Abhi yahan kuch nahi hai.', onRetry: _retry);
+          }
+          if (widget.listStyle) {
+            return ListView.builder(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              itemCount: items.length,
+              itemBuilder: (context, i) {
+                final item = items[i];
+                final img = imageUrl(item['image_url'] as String?);
+                final sub = (item['subtitle'] ?? '').toString();
+                return Card(
+                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(22),
+                    onTap: () => widget.onTap(context, item),
+                    child: Padding(
+                      padding: const EdgeInsets.all(10),
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 30,
+                            child: Text('${i + 1}',
+                                style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.pink.shade800)),
+                          ),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: SizedBox(
+                              width: 80,
+                              height: 80,
+                              child: img.isEmpty
+                                  ? Container(
+                                      color: Colors.pink.shade50,
+                                      child: Icon(widget.fallbackIcon,
+                                          size: 36, color: Colors.pink))
+                                  : CachedNetworkImage(
+                                      imageUrl: img,
+                                      fit: BoxFit.cover,
+                                      placeholder: (_, __) => const Center(
+                                          child: CircularProgressIndicator(strokeWidth: 2)),
+                                      errorWidget: (_, __, ___) => Container(
+                                          color: Colors.pink.shade50,
+                                          child: Icon(widget.fallbackIcon,
+                                              size: 36, color: Colors.pink)),
+                                    ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('${item['name'] ?? ''}',
+                                    style: const TextStyle(
+                                        fontSize: 18, fontWeight: FontWeight.bold),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis),
+                                if (sub.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 4),
+                                    child: Text(sub,
+                                        style: const TextStyle(color: Colors.grey),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Icon(Icons.play_circle_fill,
+                              size: 36, color: Colors.pink.shade700),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            );
           }
           return GridView.builder(
             padding: const EdgeInsets.all(12),
@@ -460,6 +542,7 @@ class ChapterListScreen extends StatelessWidget {
     return ItemGridScreen(
       title: '${subject['name']}',
       fallbackIcon: Icons.menu_book,
+      listStyle: true,
       loader: () async => List<DbRow>.from(await _db
           .from('chapters')
           .select()
@@ -656,6 +739,7 @@ class VideoPlayerScreen extends StatefulWidget {
 
 class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   late final WebViewController _c;
+  bool _showSeek = false;
 
   @override
   void initState() {
@@ -691,6 +775,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     }
   }
 
+  // Video ko aage/piche karna ya roknaa/chalana (page ke video element par)
+  void _seek(int sec) => _c.runJavaScript(
+      "var v=document.querySelector('video'); if(v){v.currentTime=Math.max(0,v.currentTime+($sec));}");
+
+  void _toggle() => _c.runJavaScript(
+      "var v=document.querySelector('video'); if(v){ if(v.paused){v.play();}else{v.pause();} }");
+
   @override
   void dispose() {
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
@@ -709,13 +800,68 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
             top: 8,
             left: 8,
             child: SafeArea(
-              child: IconButton(
-                style: IconButton.styleFrom(backgroundColor: Colors.black45),
-                icon: const Icon(Icons.arrow_back, color: Colors.white),
-                onPressed: () => Navigator.pop(context),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(30),
+                  onTap: () => Navigator.pop(context),
+                  child: Ink(
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFE91E63), Color(0xFFFF9800)],
+                      ),
+                      borderRadius: BorderRadius.circular(30),
+                      boxShadow: const [
+                        BoxShadow(color: Colors.black54, blurRadius: 6),
+                      ],
+                    ),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.arrow_back, color: Colors.white),
+                          SizedBox(width: 6),
+                          Text('Back',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
+          if (_showSeek)
+            Positioned(
+              bottom: 12,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final b in [
+                      [Icons.replay_10, () => _seek(-10)],
+                      [Icons.play_arrow, _toggle],
+                      [Icons.forward_10, () => _seek(10)],
+                    ])
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        child: IconButton(
+                          style: IconButton.styleFrom(
+                              backgroundColor: Colors.black45),
+                          icon: Icon(b[0] as IconData, color: Colors.white70),
+                          onPressed: b[1] as VoidCallback,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );
