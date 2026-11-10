@@ -675,10 +675,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       final html = '''
 <html><body style="margin:0;background:#000">
 <iframe style="position:fixed;inset:0;width:100%;height:100%;border:0"
- src="https://www.youtube.com/embed/$yt?autoplay=1&rel=0&playsinline=1&fs=0&modestbranding=1"
+ src="https://www.youtube.com/embed/$yt?autoplay=1&rel=0&playsinline=1&fs=0&modestbranding=1&enablejsapi=1&origin=https://highschoolassam.app"
  allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
 </body></html>''';
-      _c.loadHtmlString(html, baseUrl: 'https://www.youtube.com');
+      _c.loadHtmlString(html, baseUrl: 'https://highschoolassam.app');
     } else {
       _c.loadRequest(Uri.parse(videoUrl(widget.url)));
     }
