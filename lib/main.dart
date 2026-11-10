@@ -1,10 +1,11 @@
-
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/services.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -197,8 +198,21 @@ String imageUrl(String? url) {
 ///  3) koi aur video link (YouTube etc.) as it is
 String videoUrl(String url) {
   url = url.trim();
-  if (url.startsWith('http')) return url;
-  return 'https://iframe.mediadelivery.net/embed/$url';
+  if (!url.startsWith('http')) url = 'https://iframe.mediadelivery.net/embed/$url';
+  if (url.contains('mediadelivery.net') && !url.contains('?')) {
+    url = '$url?autoplay=true&preload=true';
+  }
+  return url;
+}
+
+/// YouTube link ya 11 akshar ki video ID se ID nikalta hai, nahi mile to null.
+String? youtubeId(String url) {
+  url = url.trim();
+  if (RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(url)) return url;
+  final m = RegExp(
+          r'(?:youtu\.be/|youtube\.com/(?:watch\?(?:.*&)?v=|embed/|shorts/|live/))([A-Za-z0-9_-]{11})')
+      .firstMatch(url);
+  return m?.group(1);
 }
 
 /// PDF: Google Drive link ho to /preview, Bunny/koi direct .pdf link ho to Google viewer.
@@ -512,7 +526,8 @@ class _ContentScreenState extends State<ContentScreen> {
                   items: of('video'),
                   icon: Icons.play_circle_fill,
                   empty: 'Videos jald aayenge',
-                  open: (r) => videoUrl(r['url'] as String)),
+                  isVideo: true,
+                  open: (r) => r['url'] as String),
               _FileList(
                   items: of('pdf'),
                   icon: Icons.picture_as_pdf,
@@ -532,7 +547,13 @@ class _FileList extends StatelessWidget {
   final IconData icon;
   final String empty;
   final String Function(DbRow) open;
-  const _FileList({required this.items, required this.icon, required this.empty, required this.open});
+  final bool isVideo;
+  const _FileList(
+      {required this.items,
+      required this.icon,
+      required this.empty,
+      required this.open,
+      this.isVideo = false});
 
   @override
   Widget build(BuildContext context) {
@@ -552,7 +573,9 @@ class _FileList extends StatelessWidget {
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(
-                  builder: (_) => WebViewScreen(title: '${r['title']}', url: open(r))),
+                  builder: (_) => isVideo
+                      ? VideoPlayerScreen(url: open(r))
+                      : WebViewScreen(title: '${r['title']}', url: open(r))),
             ),
           ),
         );
@@ -612,6 +635,82 @@ class _WebViewScreenState extends State<WebViewScreen> {
         foregroundColor: Colors.white,
       ),
       body: WebViewWidget(controller: _c),
+    );
+  }
+}
+
+
+// Video: click karte hi full screen (landscape), back dabate hi chapter me wapas
+
+class VideoPlayerScreen extends StatefulWidget {
+  final String url;
+  const VideoPlayerScreen({super.key, required this.url});
+
+  @override
+  State<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
+}
+
+class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
+  late final WebViewController _c;
+
+  @override
+  void initState() {
+    super.initState();
+    SystemChrome.setPreferredOrientations(
+        [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+
+    _c = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(Colors.black);
+
+    if (_c.platform is AndroidWebViewController) {
+      (_c.platform as AndroidWebViewController)
+          .setMediaPlaybackRequiresUserGesture(false);
+    }
+
+    final yt = youtubeId(widget.url);
+    if (yt != null) {
+      // rel=0: sirf aapke channel ke suggestions, fs=0: YouTube ka fullscreen button nahi
+      final html = '''
+<html><body style="margin:0;background:#000">
+<iframe style="position:fixed;inset:0;width:100%;height:100%;border:0"
+ src="https://www.youtube.com/embed/$yt?autoplay=1&rel=0&playsinline=1&fs=0&modestbranding=1"
+ allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+</body></html>''';
+      _c.loadHtmlString(html, baseUrl: 'https://www.youtube.com');
+    } else {
+      _c.loadRequest(Uri.parse(videoUrl(widget.url)));
+    }
+  }
+
+  @override
+  void dispose() {
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          Positioned.fill(child: WebViewWidget(controller: _c)),
+          Positioned(
+            top: 8,
+            left: 8,
+            child: SafeArea(
+              child: IconButton(
+                style: IconButton.styleFrom(backgroundColor: Colors.black45),
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
