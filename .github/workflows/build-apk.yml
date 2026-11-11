@@ -1,13 +1,18 @@
-name: Build Android APK
+name: Build Admin APK
 
 on:
   push:
-    branches: [ main, master ]
+    paths:
+      - 'admin_app/**'
+      - '.github/workflows/build-admin-apk.yml'
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: admin_app
     steps:
       - uses: actions/checkout@v4
 
@@ -21,45 +26,39 @@ jobs:
           channel: stable
           cache: true
 
-      # Android folder ko Flutter ke latest template se naya banata hai,
-      # phir API 36, internet permission aur app ka naam lagata hai.
-      - name: Recreate Android project (API 36)
+      - name: Create Android project (API 36)
         run: |
           cp -r lib /tmp/lib_bak
           cp pubspec.yaml /tmp/pubspec_bak.yaml
           rm -rf android
-          flutter create --platforms=android --org com.highschool --project-name assam .
+          flutter create --platforms=android --org com.highschool --project-name assam_admin .
           rm -rf lib && cp -r /tmp/lib_bak lib
           cp /tmp/pubspec_bak.yaml pubspec.yaml
           rm -rf test
           python3 - <<'PY'
           import re, glob
-          # build.gradle(.kts): SDK versions
           for f in glob.glob('android/app/build.gradle*'):
               s = open(f).read()
               s = re.sub(r'compileSdk(Version)?\s*=?\s*flutter\.\w+', 'compileSdk = 36', s)
               s = re.sub(r'targetSdk(Version)?\s*=?\s*flutter\.\w+', 'targetSdk = 36', s)
               s = re.sub(r'minSdk(Version)?\s*=?\s*flutter\.\w+', 'minSdk = 24', s)
               open(f, 'w').write(s)
-              print(f); print(s)
-          # Manifest: internet permission + app name
           m = 'android/app/src/main/AndroidManifest.xml'
           s = open(m).read()
           perms = '\n    <uses-permission android:name="android.permission.INTERNET"/>\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>'
           s = re.sub(r'(<manifest[^>]*>)', lambda x: x.group(1) + perms, s, count=1)
-          s = re.sub(r'android:label="[^"]*"', 'android:label="Highschool Assam"', s, count=1)
+          s = re.sub(r'android:label="[^"]*"', 'android:label="Assam Admin"', s, count=1)
           open(m, 'w').write(s)
-          print(s)
           PY
 
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Build release APK (Android 16 / API 36)
+      - name: Build release APK
         run: flutter build apk --release
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: highschool-assam-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          name: assam-admin-apk
+          path: admin_app/build/app/outputs/flutter-apk/app-release.apk
