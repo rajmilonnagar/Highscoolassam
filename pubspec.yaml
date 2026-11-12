@@ -1,5 +1,5 @@
-name: assam_admin
-description: "Admin app for Highschool Assam content management."
+name: highschool_assam
+description: "An educational app for high school students in Assam."
 publish_to: 'none'
 
 version: 1.0.0+1
@@ -11,6 +11,10 @@ dependencies:
   flutter:
     sdk: flutter
   supabase_flutter: ^2.5.0
+  device_info_plus: ^10.1.0
+  cached_network_image: ^3.4.1
+  webview_flutter: ^4.10.0
+  webview_flutter_android: ^4.0.0
 
 dev_dependencies:
   flutter_test:
