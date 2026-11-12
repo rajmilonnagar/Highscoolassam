@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -161,10 +160,16 @@ Widget subjectsScreen(DbRow m, DbRow c) => TableScreen(
       child: (s) => chaptersScreen(s),
     );
 
-Widget chaptersScreen(DbRow s) => TableScreen(
-      title: '${s['name']} - Chapters',
+Widget chaptersScreen(DbRow s, [DbRow? parent]) => TableScreen(
+      title: parent == null
+          ? '${s['name']} - Chapters'
+          : '${parent['name']} - Sub-chapters',
       table: 'chapters',
-      filter: {'subject_id': s['id']},
+      filter: {
+        'subject_id': s['id'],
+        if (parent != null) 'parent_id': parent['id'],
+      },
+      nullFilter: parent == null ? const ['parent_id'] : const [],
       fields: const [
         F('name', 'Chapter ka naam'),
         F('subtitle', 'Chhota text (optional)'),
@@ -174,6 +179,9 @@ Widget chaptersScreen(DbRow s) => TableScreen(
       titleKey: 'name',
       subtitleKey: 'subtitle',
       child: (ch) => contentsScreen(ch),
+      extraIcon: Icons.account_tree,
+      extraTooltip: 'Sub-chapters (chhote chapter)',
+      extra: (ch) => chaptersScreen(s, ch),
     );
 
 Widget contentsScreen(DbRow ch) => TableScreen(
@@ -184,6 +192,7 @@ Widget contentsScreen(DbRow ch) => TableScreen(
         F('type', 'Type', options: ['video', 'pdf', 'qa']),
         F('title', 'Title (Q&A me sawaal)'),
         F('url', 'Link (video ya pdf)'),
+        F('image_url', 'Photo link (optional)'),
         F('body', 'Jawab (sirf Q&A me)', multiline: true),
         F('sort_order', 'Order (1,2,3...)', number: true),
       ],
@@ -214,6 +223,10 @@ class TableScreen extends StatefulWidget {
   final String? subtitleKey;
   final Widget Function(DbRow row)? child;
   final bool isRoot;
+  final List<String> nullFilter; // in columns ka value khali (null) wale hi dikhao
+  final Widget Function(DbRow row)? extra; // doosra button (jaise sub-chapters)
+  final IconData extraIcon;
+  final String extraTooltip;
 
   const TableScreen({
     super.key,
@@ -225,6 +238,10 @@ class TableScreen extends StatefulWidget {
     this.subtitleKey,
     this.child,
     this.isRoot = false,
+    this.nullFilter = const [],
+    this.extra,
+    this.extraIcon = Icons.more_horiz,
+    this.extraTooltip = '',
   });
 
   @override
@@ -239,7 +256,10 @@ class _TableScreenState extends State<TableScreen> {
     widget.filter.forEach((k, v) {
       q = q.eq(k, v);
     });
-    final data = await q.order('sort_order').order('id');
+    for (final k in widget.nullFilter) {
+      q = q.isFilter(k, null);
+    }
+    final data = await q.order('sort_order', ascending: true).order('id', ascending: true);
     return List<DbRow>.from(data);
   }
 
@@ -432,6 +452,15 @@ class _TableScreenState extends State<TableScreen> {
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    if (widget.extra != null)
+                      IconButton(
+                        tooltip: widget.extraTooltip,
+                        icon: Icon(widget.extraIcon, color: Colors.indigo),
+                        onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => widget.extra!(r)),
+                        ),
+                      ),
                     IconButton(icon: const Icon(Icons.edit), onPressed: () => _edit(r)),
                     IconButton(
                         icon: const Icon(Icons.delete, color: Colors.red),
