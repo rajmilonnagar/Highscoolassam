@@ -1,6 +1,6 @@
 name: highschool_assam
-description: "An educational app for high school students in Assam."
-publish_to: 'none'
+description: "An educational app for high school students in Assam with 30-day trial and secure device locking."
+publish_to: 'none' 
 
 version: 1.0.0+1
 
@@ -15,10 +15,16 @@ dependencies:
   cached_network_image: ^3.4.1
   webview_flutter: ^4.10.0
   webview_flutter_android: ^4.0.0
+  google_fonts: ^6.2.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  flutter_lints: ^3.0.0
 
 flutter:
   uses-material-design: true
+
+  # Agar aap local images assets folder mein rakhna chahte hain, toh unhe yahan uncomment karein:
+  # assets:
+  #   - assets/
