@@ -157,6 +157,7 @@ Widget subjectsScreen(DbRow m, DbRow c) => TableScreen(
       filter: {'medium_id': m['id'], 'class_id': c['id']},
       fields: _nameImgOrder,
       titleKey: 'name',
+      bulk: true,
       child: (s) => chaptersScreen(s),
     );
 
@@ -179,6 +180,7 @@ Widget chaptersScreen(DbRow s, [DbRow? parent]) => TableScreen(
       titleKey: 'name',
       subtitleKey: 'subtitle',
       child: (ch) => contentsScreen(ch),
+      bulk: true,
       extraIcon: Icons.account_tree,
       extraTooltip: 'Sub-chapters (chhote chapter)',
       extra: (ch) => chaptersScreen(s, ch),
@@ -227,6 +229,7 @@ class TableScreen extends StatefulWidget {
   final Widget Function(DbRow row)? extra; // doosra button (jaise sub-chapters)
   final IconData extraIcon;
   final String extraTooltip;
+  final bool bulk; // ek saath kai naam add karne ka button
 
   const TableScreen({
     super.key,
@@ -242,6 +245,7 @@ class TableScreen extends StatefulWidget {
     this.extra,
     this.extraIcon = Icons.more_horiz,
     this.extraTooltip = '',
+    this.bulk = false,
   });
 
   @override
@@ -362,6 +366,57 @@ class _TableScreenState extends State<TableScreen> {
     }
   }
 
+  Future<void> _bulkAdd() async {
+    final ctrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Ek saath kai add karein'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Har naam alag line me likhein ya paste karein. Order apne aap 1,2,3... lagega.'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: ctrl,
+                minLines: 6,
+                maxLines: 12,
+                decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    hintText: 'Pehla naam\nDusra naam\nTeesra naam'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Add')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final names = ctrl.text
+        .split('\n')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    if (names.isEmpty) return;
+    try {
+      final list = await _future;
+      var n = list.length;
+      final rows = <Map<String, dynamic>>[
+        for (final name in names)
+          {...widget.filter, widget.titleKey: name, 'sort_order': ++n}
+      ];
+      await db.from(widget.table).insert(rows);
+      _msg('${names.length} add ho gaye');
+      _refresh();
+    } catch (e) {
+      _msg('Save nahi hua: $e');
+    }
+  }
+
   Future<void> _delete(DbRow row) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -393,6 +448,12 @@ class _TableScreenState extends State<TableScreen> {
       appBar: AppBar(
         title: Text(widget.title),
         actions: [
+          if (widget.bulk)
+            IconButton(
+              tooltip: 'Ek saath kai add karein',
+              icon: const Icon(Icons.playlist_add),
+              onPressed: _bulkAdd,
+            ),
           if (widget.isRoot)
             IconButton(
               tooltip: 'Logout',
