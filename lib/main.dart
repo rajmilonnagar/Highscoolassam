@@ -6,6 +6,25 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/services.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
+import 'package:google_fonts/google_fonts.dart';
+
+// App ke rang: gulabi sirf header, button aur active cheezon me
+const Color kBrand = Color(0xFFAD1457);
+const Color kBg = Color(0xFFF8F9FA);
+const Color kGrey = Color(0xFF6B7280);
+const Color kThumbBg = Color(0xFFF1F3F5);
+
+/// Safed card: halki parchhai, 16 round kone
+Card appCard({required Widget child, EdgeInsetsGeometry? margin}) => Card(
+      color: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      elevation: 3,
+      shadowColor: Colors.black26,
+      margin: margin ?? EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: child,
+    );
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,6 +36,15 @@ void main() async {
   runApp(const MyApp());
 }
 
+ThemeData _buildTheme() {
+  final base = ThemeData(
+    colorScheme: ColorScheme.fromSeed(seedColor: kBrand),
+    scaffoldBackgroundColor: kBg,
+    useMaterial3: true,
+  );
+  return base.copyWith(textTheme: GoogleFonts.poppinsTextTheme(base.textTheme));
+}
+
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -25,10 +53,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Highschool Assam',
-      theme: ThemeData(
-        primarySwatch: Colors.pink,
-        scaffoldBackgroundColor: const Color(0xFFE91E63), // Magenta / Pink background
-      ),
+      theme: _buildTheme(),
       home: const DeviceCheckScreen(),
     );
   }
@@ -124,7 +149,7 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
   Widget build(BuildContext context) {
     if (isLoading) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator(color: Colors.white)),
+        body: Center(child: CircularProgressIndicator(color: kBrand)),
       );
     }
 
@@ -137,22 +162,22 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.lock, size: 80, color: Colors.white),
+                const Icon(Icons.lock, size: 80, color: kBrand),
                 const SizedBox(height: 20),
                 const Text(
                   "Your 30-day free trial has expired!",
-                  style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                  style: TextStyle(color: Color(0xFF1F2937), fontSize: 20, fontWeight: FontWeight.bold),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 10),
                 const Text(
                   "Please pay ₹10 to continue accessing your studies.",
-                  style: TextStyle(color: Colors.white70, fontSize: 16),
+                  style: TextStyle(color: kGrey, fontSize: 16),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 30),
                 ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.pink),
+                  style: ElevatedButton.styleFrom(backgroundColor: kBrand, foregroundColor: Colors.white),
                   onPressed: () {
                     // Yahan payment gateway trigger hoga
                   },
@@ -271,7 +296,7 @@ class _ItemGridScreenState extends State<ItemGridScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title),
-        backgroundColor: Colors.pink.shade800,
+        backgroundColor: kBrand,
         foregroundColor: Colors.white,
         bottom: widget.subtitle == null
             ? null
@@ -288,7 +313,7 @@ class _ItemGridScreenState extends State<ItemGridScreen> {
         future: _future,
         builder: (context, snap) {
           if (snap.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator(color: Colors.white));
+            return const Center(child: CircularProgressIndicator(color: kBrand));
           }
           if (snap.hasError) {
             return _Message(
@@ -308,11 +333,10 @@ class _ItemGridScreenState extends State<ItemGridScreen> {
                 final item = items[i];
                 final img = imageUrl(item['image_url'] as String?);
                 final sub = (item['subtitle'] ?? '').toString();
-                return Card(
-                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+                return appCard(
+                  margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                   child: InkWell(
-                    borderRadius: BorderRadius.circular(22),
+                    borderRadius: BorderRadius.circular(16),
                     onTap: () => widget.onTap(context, item),
                     child: Padding(
                       padding: const EdgeInsets.all(10),
@@ -324,7 +348,7 @@ class _ItemGridScreenState extends State<ItemGridScreen> {
                                 style: TextStyle(
                                     fontSize: 20,
                                     fontWeight: FontWeight.bold,
-                                    color: Colors.pink.shade800)),
+                                    color: kBrand)),
                           ),
                           ClipRRect(
                             borderRadius: BorderRadius.circular(12),
@@ -333,18 +357,18 @@ class _ItemGridScreenState extends State<ItemGridScreen> {
                               height: 80,
                               child: img.isEmpty
                                   ? Container(
-                                      color: Colors.pink.shade50,
+                                      color: kThumbBg,
                                       child: Icon(widget.fallbackIcon,
-                                          size: 36, color: Colors.pink))
+                                          size: 36, color: kBrand))
                                   : CachedNetworkImage(
                                       imageUrl: img,
                                       fit: BoxFit.cover,
                                       placeholder: (_, __) => const Center(
                                           child: CircularProgressIndicator(strokeWidth: 2)),
                                       errorWidget: (_, __, ___) => Container(
-                                          color: Colors.pink.shade50,
+                                          color: kThumbBg,
                                           child: Icon(widget.fallbackIcon,
-                                              size: 36, color: Colors.pink)),
+                                              size: 36, color: kBrand)),
                                     ),
                             ),
                           ),
@@ -355,23 +379,22 @@ class _ItemGridScreenState extends State<ItemGridScreen> {
                               children: [
                                 Text('${item['name'] ?? ''}',
                                     style: const TextStyle(
-                                        fontSize: 18, fontWeight: FontWeight.bold),
+                                        fontSize: 17,
+                                        fontWeight: FontWeight.w700,
+                                        color: Color(0xFF1F2937)),
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis),
                                 if (sub.isNotEmpty)
                                   Padding(
                                     padding: const EdgeInsets.only(top: 4),
                                     child: Text(sub,
-                                        style: const TextStyle(color: Colors.grey),
+                                        style: const TextStyle(color: kGrey, fontSize: 13),
                                         maxLines: 2,
                                         overflow: TextOverflow.ellipsis),
                                   ),
                               ],
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          Icon(Icons.play_circle_fill,
-                              size: 36, color: Colors.pink.shade700),
                         ],
                       ),
                     ),
@@ -394,24 +417,22 @@ class _ItemGridScreenState extends State<ItemGridScreen> {
               final img = imageUrl(item['image_url'] as String?);
               return GestureDetector(
                 onTap: () => widget.onTap(context, item),
-                child: Card(
-                  clipBehavior: Clip.antiAlias,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: appCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Expanded(
                         child: Container(
-                          color: Colors.pink.shade50,
+                          color: kThumbBg,
                           child: img.isEmpty
-                              ? Icon(widget.fallbackIcon, size: 50, color: Colors.pink)
+                              ? Icon(widget.fallbackIcon, size: 50, color: kBrand)
                               : CachedNetworkImage(
                                   imageUrl: img,
                                   fit: BoxFit.cover,
                                   placeholder: (_, __) => const Center(
                                       child: CircularProgressIndicator(strokeWidth: 2)),
                                   errorWidget: (_, __, ___) => Icon(widget.fallbackIcon,
-                                      size: 50, color: Colors.pink),
+                                      size: 50, color: kBrand),
                                 ),
                         ),
                       ),
@@ -419,7 +440,10 @@ class _ItemGridScreenState extends State<ItemGridScreen> {
                         padding: const EdgeInsets.all(10),
                         child: Text(
                           (item['name'] ?? '') as String,
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 16,
+                              color: Color(0xFF1F2937)),
                           textAlign: TextAlign.center,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
@@ -448,11 +472,11 @@ class _Message extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(text, style: const TextStyle(color: Colors.white, fontSize: 16)),
+          Text(text, style: const TextStyle(color: kGrey, fontSize: 16)),
           const SizedBox(height: 12),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white, foregroundColor: Colors.pink),
+                backgroundColor: kBrand, foregroundColor: Colors.white),
             onPressed: onRetry,
             child: const Text('Dobara try karein'),
           ),
@@ -601,7 +625,7 @@ class _ContentScreenState extends State<ContentScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: Text('${widget.chapter['name']}'),
-          backgroundColor: Colors.pink.shade800,
+          backgroundColor: kBrand,
           foregroundColor: Colors.white,
           bottom: const TabBar(
             indicatorColor: Colors.white,
@@ -618,7 +642,7 @@ class _ContentScreenState extends State<ContentScreen> {
           future: _future,
           builder: (context, snap) {
             if (snap.connectionState != ConnectionState.done) {
-              return const Center(child: CircularProgressIndicator(color: Colors.white));
+              return const Center(child: CircularProgressIndicator(color: kBrand));
             }
             if (snap.hasError) {
               return _Message(
@@ -662,51 +686,98 @@ class _FileList extends StatelessWidget {
       this.isVideo = false});
 
   // Photo: pehle aapka diya image_url, nahi to YouTube ka apna thumbnail, nahi to icon
-  Widget _thumb(DbRow r) {
+  Widget _img(DbRow r, double iconSize) {
     var img = imageUrl(r['image_url'] as String?);
     if (img.isEmpty && isVideo) {
       final yt = youtubeId((r['url'] ?? '').toString());
       if (yt != null) img = 'https://img.youtube.com/vi/$yt/hqdefault.jpg';
     }
-    final fallback = Icon(icon, color: Colors.pink, size: 36);
-    return SizedBox(
-      width: 80,
-      height: 56,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: img.isEmpty
-            ? Center(child: fallback)
-            : CachedNetworkImage(
-                imageUrl: img,
-                fit: BoxFit.cover,
-                errorWidget: (_, __, ___) => Center(child: fallback),
-              ),
-      ),
+    final fallback = Container(
+      color: kThumbBg,
+      child: Center(child: Icon(icon, color: kBrand, size: iconSize)),
+    );
+    if (img.isEmpty) return fallback;
+    return CachedNetworkImage(
+      imageUrl: img,
+      fit: BoxFit.cover,
+      width: double.infinity,
+      height: double.infinity,
+      placeholder: (_, __) => Container(color: kThumbBg),
+      errorWidget: (_, __, ___) => fallback,
     );
   }
 
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty) {
-      return Center(child: Text(empty, style: const TextStyle(color: Colors.white, fontSize: 18)));
+      return Center(child: Text(empty, style: const TextStyle(color: kGrey, fontSize: 18)));
     }
     return ListView.builder(
+      padding: const EdgeInsets.symmetric(vertical: 8),
       itemCount: items.length,
       itemBuilder: (context, i) {
         final r = items[i];
-        return Card(
-          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          child: ListTile(
-            leading: _thumb(r),
-            title: Text('${r['title']}', style: const TextStyle(fontWeight: FontWeight.bold)),
-            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-            onTap: () => Navigator.push(
+        void openIt() => Navigator.push(
               context,
               MaterialPageRoute(
                   builder: (_) => isVideo
                       ? VideoPlayerScreen(url: open(r))
                       : WebViewScreen(title: '${r['title']}', url: open(r))),
-            ),
+            );
+        final title = Text(
+          '${r['title']}',
+          style: const TextStyle(
+              fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF1F2937)),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        );
+        return appCard(
+          margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          child: InkWell(
+            onTap: openIt,
+            child: isVideo
+                // Video: bada card, upar 16:9 photo, neeche title
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      AspectRatio(
+                        aspectRatio: 16 / 9,
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            _img(r, 56),
+                            Center(
+                              child: Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: const BoxDecoration(
+                                    color: Colors.black45, shape: BoxShape.circle),
+                                child: const Icon(Icons.play_arrow,
+                                    color: Colors.white, size: 34),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                        child: title,
+                      ),
+                    ],
+                  )
+                // PDF: chhota photo/icon baayein, title daayein
+                : Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Row(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: SizedBox(width: 72, height: 72, child: _img(r, 34)),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(child: title),
+                      ],
+                    ),
+                  ),
           ),
         );
       },
@@ -722,13 +793,16 @@ class _QaList extends StatelessWidget {
   Widget build(BuildContext context) {
     if (items.isEmpty) {
       return const Center(
-          child: Text('Q & A jald aayenge', style: TextStyle(color: Colors.white, fontSize: 18)));
+          child: Text('Q & A jald aayenge', style: TextStyle(color: kGrey, fontSize: 18)));
     }
     return ListView.builder(
       itemCount: items.length,
-      itemBuilder: (context, i) => Card(
-        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemBuilder: (context, i) => appCard(
+        margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         child: ExpansionTile(
+          shape: const Border(),
+          collapsedShape: const Border(),
           title: Text('${items[i]['title']}', style: const TextStyle(fontWeight: FontWeight.bold)),
           childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           expandedAlignment: Alignment.centerLeft,
@@ -761,7 +835,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title),
-        backgroundColor: Colors.pink.shade800,
+        backgroundColor: kBrand,
         foregroundColor: Colors.white,
       ),
       body: WebViewWidget(controller: _c),
