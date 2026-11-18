@@ -599,7 +599,7 @@ class ChapterListScreen extends StatelessWidget {
   }
 }
 
-// Content: Videos / PDF Notes / Q & A
+// Content: Videos / MCQ / Book
 
 class ContentScreen extends StatefulWidget {
   final DbRow chapter;
@@ -633,8 +633,8 @@ class _ContentScreenState extends State<ContentScreen> {
             unselectedLabelColor: Colors.white70,
             tabs: [
               Tab(icon: Icon(Icons.video_library), text: 'Videos'),
-              Tab(icon: Icon(Icons.picture_as_pdf), text: 'PDF Notes'),
-              Tab(icon: Icon(Icons.question_answer), text: 'Q & A'),
+              Tab(icon: Icon(Icons.quiz), text: 'MCQ'),
+              Tab(icon: Icon(Icons.menu_book), text: 'Book'),
             ],
           ),
         ),
@@ -660,8 +660,8 @@ class _ContentScreenState extends State<ContentScreen> {
                   open: (r) => r['url'] as String),
               _FileList(
                   items: of('pdf'),
-                  icon: Icons.picture_as_pdf,
-                  empty: 'PDF jald aayenge',
+                  icon: Icons.quiz,
+                  empty: 'MCQ jald aayenge',
                   open: (r) => pdfUrl(r['url'] as String)),
               _QaList(items: of('qa')),
             ]);
@@ -789,26 +789,93 @@ class _QaList extends StatelessWidget {
   final List<DbRow> items;
   const _QaList({required this.items});
 
+  // Ek square safed card me photo (poori dikhe, kate nahi)
+  Widget _pic(String? raw) {
+    final img = imageUrl(raw);
+    return appCard(
+      child: AspectRatio(
+        aspectRatio: 1,
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: img.isEmpty
+              ? const Center(child: Icon(Icons.image_outlined, size: 48, color: kThumbBg))
+              : CachedNetworkImage(
+                  imageUrl: img,
+                  fit: BoxFit.contain,
+                  placeholder: (_, __) =>
+                      const Center(child: CircularProgressIndicator(strokeWidth: 2, color: kBrand)),
+                  errorWidget: (_, __, ___) => const Center(
+                      child: Icon(Icons.broken_image_outlined, size: 48, color: kGrey)),
+                ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty) {
       return const Center(
-          child: Text('Q & A jald aayenge', style: TextStyle(color: kGrey, fontSize: 18)));
+          child: Text('Book jald aayegi', style: TextStyle(color: kGrey, fontSize: 18)));
     }
     return ListView.builder(
       itemCount: items.length,
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      itemBuilder: (context, i) => appCard(
-        margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-        child: ExpansionTile(
-          shape: const Border(),
-          collapsedShape: const Border(),
-          title: Text('${items[i]['title']}', style: const TextStyle(fontWeight: FontWeight.bold)),
-          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          expandedAlignment: Alignment.centerLeft,
-          children: [Text('${items[i]['body'] ?? ''}')],
-        ),
-      ),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
+      itemBuilder: (context, i) {
+        final r = items[i];
+        final title = '${r['title'] ?? ''}';
+        final body = '${r['body'] ?? ''}';
+        final hasPics = (r['image_url'] ?? '').toString().trim().isNotEmpty ||
+            (r['image_url2'] ?? '').toString().trim().isNotEmpty;
+
+        // Photo nahi hai (purana Q&A) to pehle jaisa sawaal-jawab card
+        if (!hasPics) {
+          return appCard(
+            margin: const EdgeInsets.symmetric(vertical: 7),
+            child: ExpansionTile(
+              shape: const Border(),
+              collapsedShape: const Border(),
+              title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+              childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              expandedAlignment: Alignment.centerLeft,
+              children: [Text(body)],
+            ),
+          );
+        }
+
+        // Do card ek line me: baayein A ka photo, daayein Apple ka photo
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 22),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Expanded(child: _pic(r['image_url'] as String?)),
+                  const SizedBox(width: 14),
+                  Expanded(child: _pic(r['image_url2'] as String?)),
+                ],
+              ),
+              if (title.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Text(
+                    title,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        fontSize: 20, fontWeight: FontWeight.w700, color: Color(0xFF1F2937)),
+                  ),
+                ),
+              if (body.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(body,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 14, color: kGrey)),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
