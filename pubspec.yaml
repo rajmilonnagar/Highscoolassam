@@ -1,6 +1,6 @@
 name: highschool_assam
 description: "An educational app for high school students in Assam with 30-day trial and secure device locking."
-publish_to: 'none' 
+publish_to: 'none'
 
 version: 1.0.0+1
 
@@ -16,6 +16,7 @@ dependencies:
   webview_flutter: ^4.10.0
   webview_flutter_android: ^4.0.0
   google_fonts: ^6.2.1
+  video_player: ^2.8.6
 
 dev_dependencies:
   flutter_test:
@@ -25,6 +26,5 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
-  # Agar aap local images assets folder mein rakhna chahte hain, toh unhe yahan uncomment karein:
-  # assets:
-  #   - assets/
+  assets:
+    - assets/videos/splash.mp4
