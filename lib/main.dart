@@ -55,7 +55,7 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Highschool Assam',
       theme: _buildTheme(),
-      home: const DeviceCheckScreen(),
+      home: const SplashScreen(next: DeviceCheckScreen()),
     );
   }
 }
