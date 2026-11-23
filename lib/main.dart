@@ -592,7 +592,7 @@ class ChapterListScreen extends StatelessWidget {
           MaterialPageRoute(
             builder: (_) => kids.isNotEmpty
                 ? ChapterListScreen(subject: subject, parent: chapter)
-                : ContentScreen(chapter: chapter),
+                : ChipContentScreen(chapter: chapter, subject: subject),
           ),
         );
       },
