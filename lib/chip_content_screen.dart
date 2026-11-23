@@ -139,4 +139,91 @@ class _ChipContentScreenState extends State<ChipContentScreen> {
     );
   }
 
-  // ---------------- S
+  // ---------------- Sliding chips: photo + naam ----------------
+  Widget _chips() {
+    return Container(
+      color: Colors.white,
+      height: 56,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+        itemCount: _cats.length,
+        itemBuilder: (_, i) {
+          final c = _cats[i];
+          final on = i == _sel;
+          final img = imageUrl(c['image_url'] as String?);
+          final fallback = Icon(Icons.folder_outlined,
+              size: 20, color: on ? Colors.white : kBrand);
+          return GestureDetector(
+            key: _keys[i],
+            onTap: () => _select(i),
+            child: Container(
+              alignment: Alignment.center,
+              margin: const EdgeInsets.only(right: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: on ? kBrand : Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: on ? kBrand : const Color(0xFFD1D5DB)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: img.isEmpty
+                        ? fallback
+                        : CachedNetworkImage(
+                            imageUrl: img,
+                            fit: BoxFit.contain,
+                            errorWidget: (_, __, ___) => fallback,
+                          ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '${c['name'] ?? ''}',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: on ? Colors.white : const Color(0xFF1F2937),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // ---------------- Selected category ka material ----------------
+  // category type: video -> video cards, pdf -> PDF list, qa -> photo / sawal-jawab cards
+  Widget _items() {
+    final c = _cats[_sel];
+    final items = _content[c['id']] ?? [];
+    final type = (c['type'] ?? 'qa').toString();
+
+    Widget view;
+    if (type == 'video') {
+      view = _FileList(
+        items: items,
+        icon: Icons.play_circle_fill,
+        empty: 'Videos jald aayenge',
+        isVideo: true,
+        open: (r) => r['url'] as String,
+      );
+    } else if (type == 'pdf') {
+      view = _FileList(
+        items: items,
+        icon: Icons.picture_as_pdf,
+        empty: 'Jald aayega',
+        open: (r) => pdfUrl(r['url'] as String),
+      );
+    } else {
+      view = _QaList(items: items);
+    }
+    return KeyedSubtree(key: ValueKey(c['id']), child: view);
+  }
+}
