@@ -28,12 +28,15 @@ jobs:
       # phir API 36, internet permission aur app ka naam lagata hai.
       - name: Recreate Android project (API 36)
         run: |
-          cp -r lib /tmp/lib_bak
+                    cp -r lib /tmp/lib_bak
           cp pubspec.yaml /tmp/pubspec_bak.yaml
+          mkdir -p /tmp/icons_bak
+          cp -r android/app/src/main/res/mipmap-* /tmp/icons_bak/
           rm -rf android
           flutter create --platforms=android --org com.highschool --project-name assam .
           rm -rf lib && cp -r /tmp/lib_bak lib
           cp /tmp/pubspec_bak.yaml pubspec.yaml
+          cp -r /tmp/icons_bak/mipmap-* android/app/src/main/res/
           rm -rf test
           python3 - <<'PY'
           import re, glob
