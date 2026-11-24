@@ -127,4 +127,114 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
         if (billPaid || daysLeft > 0) {
           setState(() {
             isAccessAllowed = true;
-            remaining
+            remainingDays = daysLeft > 0 ? daysLeft : 0;
+            isLoading = false;
+          });
+        } else {
+          // Trial khatam aur bill pay nahi hua
+          setState(() {
+            isAccessAllowed = false;
+            isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      // Error handling
+      setState(() {
+        isLoading = false;
+        isAccessAllowed = true; // Offline/Error fallback
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator(color: kBrand)),
+      );
+    }
+
+    if (!isAccessAllowed) {
+      // Pay Bill Screen
+      return Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.lock, size: 80, color: kBrand),
+                const SizedBox(height: 20),
+                const Text(
+                  "Your 30-day free trial has expired!",
+                  style: TextStyle(color: Color(0xFF1F2937), fontSize: 20, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  "Please pay ₹10 to continue accessing your studies.",
+                  style: TextStyle(color: kGrey, fontSize: 16),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 30),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: kBrand, foregroundColor: Colors.white),
+                  onPressed: () {
+                    // Yahan payment gateway trigger hoga
+                  },
+                  child: const Text("Pay ₹10 Now", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Access granted -> Medium Selection Screen
+    return MediumSelectionScreen(deviceId: deviceId, remainingDays: remainingDays);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers: Google Drive / Bunny.net links ko app ke kaam layak URL me badalna
+// ---------------------------------------------------------------------------
+
+String? _driveId(String url) {
+  if (!url.contains('drive.google.com') && !url.contains('docs.google.com')) {
+    return null;
+  }
+  final m = RegExp(r'/d/([a-zA-Z0-9_-]+)').firstMatch(url) ??
+      RegExp(r'[?&]id=([a-zA-Z0-9_-]+)').firstMatch(url);
+  return m?.group(1);
+}
+
+/// Google Drive photo link -> seedha image URL. Normal link ho to waisa hi.
+String imageUrl(String? url) {
+  if (url == null || url.trim().isEmpty) return '';
+  url = url.trim();
+  final id = _driveId(url);
+  if (id != null) return 'https://lh3.googleusercontent.com/d/$id=w600';
+  return url;
+}
+
+/// Bunny Stream video. Teeno me se koi bhi format chalega:
+///  1) poora embed link:  https://iframe.mediadelivery.net/embed/LIB/VIDEO
+///  2) chhota:            LIB/VIDEO
+///  3) koi aur video link (YouTube etc.) as it is
+String videoUrl(String url) {
+  url = url.trim();
+  if (!url.startsWith('http')) url = 'https://iframe.mediadelivery.net/embed/$url';
+  if (url.contains('mediadelivery.net') && !url.contains('?')) {
+    url = '$url?autoplay=true&preload=true';
+  }
+  return url;
+}
+
+/// YouTube link ya 11 akshar ki video ID se ID nikalta hai, nahi mile to null.
+String? youtubeId(String url) {
+  url = url.trim();
+  if (RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(url)) return url;
+  final m = RegExp(
+          r'(?:youtu\.be/|
