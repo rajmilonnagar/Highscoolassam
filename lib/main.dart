@@ -377,4 +377,170 @@ class _ItemGridScreenState extends State<ItemGridScreen> {
                                           child: CircularProgressIndicator(strokeWidth: 2)),
                                       errorWidget: (_, __, ___) => Container(
                                           color: kThumbBg,
-                                          child: Icon(widget.
+                                          child: Icon(widget.fallbackIcon,
+                                              size: 36, color: kBrand)),
+                                    ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('${item['name'] ?? ''}',
+                                    style: const TextStyle(
+                                        fontSize: 17,
+                                        fontWeight: FontWeight.w700,
+                                        color: Color(0xFF1F2937)),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis),
+                                if (sub.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 4),
+                                    child: Text(sub,
+                                        style: const TextStyle(color: kGrey, fontSize: 13),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            );
+          }
+          return GridView.builder(
+            padding: const EdgeInsets.all(12),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: widget.columns,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              childAspectRatio: widget.aspect,
+            ),
+            itemCount: items.length,
+            itemBuilder: (context, i) {
+              final item = items[i];
+              final img = imageUrl(item['image_url'] as String?);
+              return GestureDetector(
+                onTap: () => widget.onTap(context, item),
+                child: appCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: Container(
+                          color: kThumbBg,
+                          child: img.isEmpty
+                              ? Icon(widget.fallbackIcon, size: 50, color: kBrand)
+                              : CachedNetworkImage(
+                                  imageUrl: img,
+                                  fit: BoxFit.cover,
+                                  placeholder: (_, __) => const Center(
+                                      child: CircularProgressIndicator(strokeWidth: 2)),
+                                  errorWidget: (_, __, ___) => Icon(widget.fallbackIcon,
+                                      size: 50, color: kBrand),
+                                ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: Text(
+                          (item['name'] ?? '') as String,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 16,
+                              color: Color(0xFF1F2937)),
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Message extends StatelessWidget {
+  final String text;
+  final VoidCallback onRetry;
+  const _Message({required this.text, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(text, style: const TextStyle(color: kGrey, fontSize: 16)),
+          const SizedBox(height: 12),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+                backgroundColor: kBrand, foregroundColor: Colors.white),
+            onPressed: onRetry,
+            child: const Text('Dobara try karein'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 2. Medium -> 3. Class -> 4. Subject -> 5. Chapter -> 6. Content
+// ---------------------------------------------------------------------------
+
+class MediumSelectionScreen extends StatelessWidget {
+  final String deviceId;
+  final int remainingDays;
+  const MediumSelectionScreen({super.key, required this.deviceId, required this.remainingDays});
+
+  @override
+  Widget build(BuildContext context) {
+    final shortId = deviceId.length > 6 ? deviceId.substring(0, 6) : deviceId;
+    return ItemGridScreen(
+      title: 'Select Medium',
+      subtitle: 'ID: $shortId... | Free Trial: $remainingDays Days Left',
+      fallbackIcon: Icons.school,
+      showBanner: true,
+      loader: () async => List<DbRow>.from(
+          await _db.from('mediums').select().order('sort_order', ascending: true)),
+      onTap: (context, medium) => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => ClassListScreen(medium: medium)),
+      ),
+    );
+  }
+}
+
+class ClassListScreen extends StatelessWidget {
+  final DbRow medium;
+  const ClassListScreen({super.key, required this.medium});
+
+  @override
+  Widget build(BuildContext context) {
+    return ItemGridScreen(
+      title: '${medium['name']} - Classes',
+      fallbackIcon: Icons.class_,
+      aspect: 1.1,
+      showBanner: true,
+      bannerMedium: medium,
+      loader: () async => List<DbRow>.from(
+          await _db.from('classes').select().order('sort_order', ascending: true)),
+      onTap: (context, cls) => Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => Subject
