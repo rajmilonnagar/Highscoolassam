@@ -420,4 +420,195 @@ class _TableScreenState extends State<TableScreen> {
       for (final f in widget.fields) {
         if (f.fromTable != null) {
           final data = await db
-              .from(f.from
+              .from(f.fromTable!)
+              .select()
+              .order('sort_order', ascending: true);
+          choices[f.key] = List<DbRow>.from(data);
+        }
+      }
+    } catch (e) {
+      _msg('Dropdown load nahi hua: $e');
+      return;
+    }
+    // Naye row me dropdown sirf is class ki categories dikhaye
+    if (row == null &&
+        widget.chipsClassId != null &&
+        _chips.isNotEmpty &&
+        choices.containsKey(widget.chipsKey)) {
+      choices[widget.chipsKey] = List<DbRow>.from(_chips);
+    }
+    // Naye row me order apne aap agla number
+    if (row == null) {
+      final list = await _future;
+      for (final f in widget.fields) {
+        if (f.number && ctrls[f.key]!.text.isEmpty) {
+          ctrls[f.key]!.text = '${list.length + 1}';
+        }
+        if (f.options != null && ctrls[f.key]!.text.isEmpty) {
+          ctrls[f.key]!.text = f.options!.first;
+        }
+        if (f.fromTable != null &&
+            ctrls[f.key]!.text.isEmpty &&
+            (choices[f.key] ?? []).isNotEmpty) {
+          ctrls[f.key]!.text = '${choices[f.key]!.first['id']}';
+        }
+        if (widget.chipsTable != null && f.key == widget.chipsKey) {
+          final cur = _chipSel;
+          if (cur != null &&
+              cur != '_none' &&
+              _chips.any((c) => '${c['id']}' == cur)) {
+            ctrls[f.key]!.text = cur;
+          }
+        }
+      }
+    }
+    if (!mounted) return;
+
+    final ok = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute<bool>(
+        fullscreenDialog: true,
+        builder: (ctx) => Scaffold(
+          appBar: AppBar(
+            leading: IconButton(
+              icon: const Icon(Icons.close),
+              onPressed: () => Navigator.pop(ctx, false),
+            ),
+            title: Text(row == null ? 'Naya add karein' : 'Badlein'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Save'),
+              ),
+            ],
+          ),
+          body: SafeArea(
+            child: ListView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+              children: [
+                for (final f in widget.fields)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 14),
+                    child: f.fromTable != null
+                        ? DropdownButtonFormField<String>(
+                            isExpanded: true,
+                            value: (choices[f.key] ?? <DbRow>[]).any(
+                                    (r) => '${r['id']}' == ctrls[f.key]!.text)
+                                ? ctrls[f.key]!.text
+                                : null,
+                            decoration: InputDecoration(
+                                labelText: f.label,
+                                border: const OutlineInputBorder()),
+                            items: [
+                              for (final r in choices[f.key] ?? <DbRow>[])
+                                DropdownMenuItem(
+                                    value: '${r['id']}',
+                                    child: Text('${r[f.labelKey]}'))
+                            ],
+                            onChanged: (v) => ctrls[f.key]!.text = v ?? '',
+                          )
+                        : f.options != null
+                            ? DropdownButtonFormField<String>(
+                                value: ctrls[f.key]!.text,
+                                decoration: InputDecoration(
+                                    labelText: f.label,
+                                    border: const OutlineInputBorder()),
+                                items: [
+                                  for (final o in f.options!)
+                                    DropdownMenuItem(value: o, child: Text(o))
+                                ],
+                                onChanged: (v) => ctrls[f.key]!.text = v ?? '',
+                              )
+                            : TextField(
+                                controller: ctrls[f.key],
+                                keyboardType: f.multiline
+                                    ? TextInputType.multiline
+                                    : f.number
+                                        ? TextInputType.number
+                                        : TextInputType.text,
+                                minLines: f.multiline ? 8 : 1,
+                                maxLines: f.multiline ? null : 3,
+                                decoration: InputDecoration(
+                                    labelText: f.label,
+                                    alignLabelWithHint: f.multiline,
+                                    border: const OutlineInputBorder()),
+                              ),
+                  ),
+                const SizedBox(height: 24),
+                FilledButton.icon(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  icon: const Icon(Icons.check),
+                  label: const Text('Save'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (ok != true) return;
+
+    final vals = <String, dynamic>{};
+    for (final f in widget.fields) {
+      final t = ctrls[f.key]!.text.trim();
+      if (f.number) {
+        vals[f.key] = int.tryParse(t) ?? 0;
+      } else if (f.fromTable != null) {
+        vals[f.key] = t.isEmpty ? null : (int.tryParse(t) ?? t);
+        final sel = (choices[f.key] ?? <DbRow>[]).where((r) => '${r['id']}' == t);
+        if (sel.isNotEmpty) {
+          f.copy.forEach((from, to) => vals[to] = sel.first[from]);
+        }
+      } else {
+        vals[f.key] = t.isEmpty ? null : t;
+      }
+    }
+    if (vals[widget.titleKey] == null) {
+      _msg('Naam / title khali nahi ho sakta');
+      return;
+    }
+
+    try {
+      if (row == null) {
+        await db.from(widget.table).insert({...widget.filter, ...vals});
+      } else {
+        await db.from(widget.table).update(vals).eq('id', row['id']);
+      }
+      _msg('Save ho gaya');
+      _refresh();
+    } catch (e) {
+      _msg('Save nahi hua: $e');
+    }
+  }
+
+  Future<void> _bulkAdd() async {
+    final ctrl = TextEditingController();
+    final ok = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute<bool>(
+        fullscreenDialog: true,
+        builder: (ctx) => Scaffold(
+          appBar: AppBar(
+            leading: IconButton(
+              icon: const Icon(Icons.close),
+              onPressed: () => Navigator.pop(ctx, false),
+            ),
+            title: const Text('Ek saath kai add karein'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Add'),
+              ),
+            ],
+          ),
+          body: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  const Text(
+                      'Har naam alag line me likhein ya paste karein. Order apne aap 1,2,3... lagega.'),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: Text
