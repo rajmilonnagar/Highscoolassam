@@ -136,4 +136,192 @@ const _nameImgOrder = [
   F('sort_order', 'Order (1,2,3...)', number: true),
 ];
 
-Widget mediumsScreen() => Table
+Widget mediumsScreen() => TableScreen(
+      title: 'Mediums',
+      table: 'mediums',
+      fields: [
+        ..._nameImgOrder,
+        const F('greet_morning', 'Subah ka shabd (Good Morning ki jagah, us bhasha me)'),
+        const F('greet_afternoon', 'Dopahar ka shabd (Good Afternoon)'),
+        const F('greet_evening', 'Shaam ka shabd (Good Evening)'),
+        const F('greet_night', 'Raat ka shabd (Good Night)'),
+      ],
+      titleKey: 'name',
+      isRoot: true,
+      child: (m) => classesScreen(m),
+    );
+
+Widget classesScreen(DbRow m) => TableScreen(
+      title: '${m['name']} - Classes',
+      table: 'classes',
+      fields: _nameImgOrder,
+      titleKey: 'name',
+      child: (c) => subjectsScreen(m, c),
+    );
+
+Widget subjectsScreen(DbRow m, DbRow c) => TableScreen(
+      title: '${c['name']} - Subjects',
+      table: 'subjects',
+      filter: {'medium_id': m['id'], 'class_id': c['id']},
+      fields: _nameImgOrder,
+      titleKey: 'name',
+      bulk: true,
+      child: (s) => chaptersScreen(s),
+    );
+
+Widget chaptersScreen(DbRow s, [DbRow? parent]) => TableScreen(
+      title: parent == null
+          ? '${s['name']} - Chapters'
+          : '${parent['name']} - Sub-chapters',
+      table: 'chapters',
+      filter: {
+        'subject_id': s['id'],
+        if (parent != null) 'parent_id': parent['id'],
+      },
+      nullFilter: parent == null ? const ['parent_id'] : const [],
+      fields: const [
+        F('name', 'Chapter ka naam'),
+        F('subtitle', 'Chhota text (optional)'),
+        F('image_url', 'Photo link (Google Drive)'),
+        F('sort_order', 'Order (1,2,3...)', number: true),
+      ],
+      titleKey: 'name',
+      subtitleKey: 'subtitle',
+      child: (ch) => contentsScreen(ch),
+      bulk: true,
+      extraIcon: Icons.account_tree,
+      extraTooltip: 'Sub-chapters (chhote chapter)',
+      extra: (ch) => chaptersScreen(s, ch),
+    );
+
+Widget contentsScreen(DbRow ch) => TableScreen(
+      title: '${ch['name']} - Content',
+      table: 'contents',
+      filter: {'chapter_id': ch['id']},
+      fields: const [
+        F('category_id', 'Category (database se)', fromTable: 'categories', copy: {'type': 'type'}),
+        F('title', 'Title (Book me neeche ka naam, jaise A for Apple)'),
+        F('url', 'Link (video ya MCQ pdf)'),
+        F('image_url', 'Photo 1 (video ka thumbnail / Book me BAAYEIN card)'),
+        F('image_url2', 'Photo 2 (sirf Book me DAAYEIN card)'),
+        F('body', 'Chhota text (Book me, optional)', multiline: true),
+        F('sort_order', 'Order (1,2,3...)', number: true),
+      ],
+      titleKey: 'title',
+      subtitleKey: 'type',
+    );
+
+// ---------------------------------------------------------------------------
+// Generic table screen: list + add + edit + delete
+// ---------------------------------------------------------------------------
+
+class F {
+  final String key;
+  final String label;
+  final bool multiline;
+  final bool number;
+  final List<String>? options;
+  // Dropdown jo database ki table se aata hai (jaise categories)
+  final String? fromTable;
+  final String labelKey; // dropdown me kaun sa column dikhe
+  final Map<String, String> copy; // chuni row ka column -> is row ke column me copy
+  const F(this.key, this.label,
+      {this.multiline = false,
+      this.number = false,
+      this.options,
+      this.fromTable,
+      this.labelKey = 'name',
+      this.copy = const {}});
+}
+
+class TableScreen extends StatefulWidget {
+  final String title;
+  final String table;
+  final Map<String, dynamic> filter;
+  final List<F> fields;
+  final String titleKey;
+  final String? subtitleKey;
+  final Widget Function(DbRow row)? child;
+  final bool isRoot;
+  final List<String> nullFilter; // in columns ka value khali (null) wale hi dikhao
+  final Widget Function(DbRow row)? extra; // doosra button (jaise sub-chapters)
+  final IconData extraIcon;
+  final String extraTooltip;
+  final bool bulk; // ek saath kai naam add karne ka button
+
+  const TableScreen({
+    super.key,
+    required this.title,
+    required this.table,
+    required this.fields,
+    required this.titleKey,
+    this.filter = const {},
+    this.subtitleKey,
+    this.child,
+    this.isRoot = false,
+    this.nullFilter = const [],
+    this.extra,
+    this.extraIcon = Icons.more_horiz,
+    this.extraTooltip = '',
+    this.bulk = false,
+  });
+
+  @override
+  State<TableScreen> createState() => _TableScreenState();
+}
+
+class _TableScreenState extends State<TableScreen> {
+  late Future<List<DbRow>> _future = _load();
+
+  Future<List<DbRow>> _load() async {
+    var q = db.from(widget.table).select();
+    widget.filter.forEach((k, v) {
+      q = q.eq(k, v);
+    });
+    for (final k in widget.nullFilter) {
+      q = q.isFilter(k, null);
+    }
+    final data = await q.order('sort_order', ascending: true).order('id', ascending: true);
+    return List<DbRow>.from(data);
+  }
+
+  void _refresh() => setState(() => _future = _load());
+
+  void _msg(String text) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+  }
+
+  Future<void> _edit([DbRow? row]) async {
+    final ctrls = {
+      for (final f in widget.fields)
+        f.key: TextEditingController(
+            text: row?[f.key] == null ? '' : '${row![f.key]}')
+    };
+    // Database se aane wale dropdown (jaise categories) pehle load karein
+    final choices = <String, List<DbRow>>{};
+    try {
+      for (final f in widget.fields) {
+        if (f.fromTable != null) {
+          final data = await db
+              .from(f.fromTable!)
+              .select()
+              .order('sort_order', ascending: true);
+          choices[f.key] = List<DbRow>.from(data);
+        }
+      }
+    } catch (e) {
+      _msg('Dropdown load nahi hua: $e');
+      return;
+    }
+    // Naye row me order apne aap agla number
+    if (row == null) {
+      final list = await _future;
+      for (final f in widget.fields) {
+        if (f.number && ctrls[f.key]!.text.isEmpty) {
+          ctrls[f.key]!.text = '${list.length + 1}';
+        }
+        if (f.options != null && ctrls[f.key]!.text.isEmpty) {
+          ctrls[f.key]!.text = f.options!.first;
+        }
+        if (f.from
