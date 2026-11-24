@@ -144,4 +144,152 @@ class _NoticeBannerState extends State<NoticeBanner> {
               backgroundColor: col.withAlpha(40),
               child: Icon(icon, color: col, size: 26),
             ),
-            const SizedBox
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1F2937)),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    line,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12, color: kGrey),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ---------------- Notice / shubhkamna banner ----------------
+  Widget _banner() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+      height: 84,
+      child: Stack(
+        children: [
+          PageView.builder(
+            controller: _pc,
+            itemCount: _items.length,
+            onPageChanged: (i) => setState(() => _page = i),
+            itemBuilder: (_, i) => _card(_items[i]),
+          ),
+          Positioned(
+            top: 0,
+            right: 0,
+            child: InkWell(
+              onTap: () => setState(() => _hidden = true),
+              child: const Padding(
+                padding: EdgeInsets.all(8),
+                child: Icon(Icons.close, size: 16, color: Colors.white70),
+              ),
+            ),
+          ),
+          if (_items.length > 1)
+            Positioned(
+              bottom: 6,
+              left: 0,
+              right: 0,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  for (int i = 0; i < _items.length; i++)
+                    Container(
+                      width: 6,
+                      height: 6,
+                      margin: const EdgeInsets.symmetric(horizontal: 2),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: i == _page ? Colors.white : Colors.white38,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _card(DbRow n) {
+    final title = '${n['title'] ?? ''}';
+    final msg = '${n['message'] ?? ''}';
+    final link = '${n['link'] ?? ''}'.trim();
+    final img = imageUrl(n['image_url'] as String?);
+    const fallback = Icon(Icons.campaign, color: Colors.white, size: 36);
+
+    return GestureDetector(
+      onTap: link.isEmpty
+          ? null
+          : () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => WebViewScreen(title: title, url: link)),
+              ),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(colors: [kBrand, Color(0xFFE91E63)]),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        padding: const EdgeInsets.fromLTRB(12, 10, 28, 10),
+        child: Row(
+          children: [
+            if (img.isEmpty)
+              fallback
+            else
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: SizedBox(
+                  width: 60,
+                  height: 60,
+                  child: CachedNetworkImage(
+                    imageUrl: img,
+                    fit: BoxFit.cover,
+                    errorWidget: (_, __, ___) => fallback,
+                  ),
+                ),
+              ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15)),
+                  if (msg.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(msg,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 12)),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
