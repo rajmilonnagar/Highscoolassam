@@ -975,4 +975,172 @@ class _TableScreenState extends State<TableScreen> {
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Nahi')),
           FilledButton(
               style: FilledButton.styleFrom(backgroundColor: Colors.red),
-              onPressed: () => Navigator.pop
+              onPressed: () => Navigator.pop(ctx, false), child: const Text('Nahi')),
+          FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Haan, delete')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await db.from(widget.table).delete().eq('id', row['id']);
+      _refresh();
+    } catch (e) {
+      _msg('Delete nahi hua: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.title),
+        actions: [
+          if (widget.bulk)
+            IconButton(
+              tooltip: 'Ek saath kai add karein',
+              icon: const Icon(Icons.playlist_add),
+              onPressed: _bulkAdd,
+            ),
+          if (widget.isRoot)
+            PopupMenuButton<String>(
+              tooltip: 'Categories / Notice',
+              icon: const Icon(Icons.tune),
+              onSelected: (v) {
+                final Widget page = v == 'cat'
+                    ? const CategoryManagerScreen()
+                    : v == 'cls'
+                        ? const ClassCategorySetupScreen()
+                        : const NoticeManagerScreen();
+                Navigator.push(
+                    context, MaterialPageRoute(builder: (_) => page));
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'cat', child: Text('Categories')),
+                PopupMenuItem(
+                    value: 'cls', child: Text('Class ke hisab se categories')),
+                PopupMenuItem(value: 'notice', child: Text('Notice / Banner')),
+              ],
+            ),
+          if (widget.isRoot)
+            IconButton(
+              tooltip: 'Logout',
+              icon: const Icon(Icons.logout),
+              onPressed: () => db.auth.signOut(),
+            ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _edit(),
+        icon: const Icon(Icons.add),
+        label: const Text('Add'),
+      ),
+      body: FutureBuilder<List<DbRow>>(
+        future: _future,
+        builder: (context, snap) {
+          if (snap.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snap.hasError) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('Data nahi aaya:\n${snap.error}', textAlign: TextAlign.center),
+                    const SizedBox(height: 12),
+                    FilledButton(onPressed: _refresh, child: const Text('Dobara try karein')),
+                  ],
+                ),
+              ),
+            );
+          }
+          final all = snap.data ?? [];
+          if (all.isEmpty && widget.chipsTable == null) {
+            return const Center(child: Text('Abhi kuch nahi hai. Neeche Add dabayein.'));
+          }
+          final hasNone = all.any((r) => _chipOf(r) == null);
+          final sel = _effectiveChip(hasNone);
+          final rows = widget.chipsTable == null
+              ? all
+              : all.where((r) => (_chipOf(r) ?? '_none') == sel).toList();
+          Widget tile(int i) {
+            final r = rows[i];
+            final sub = widget.subtitleKey == null
+                ? ''
+                : '${r[widget.subtitleKey] ?? ''}';
+            return ListTile(
+              key: ValueKey('${r['id']}'),
+              leading: _leading(r, i),
+              title: Text('${r[widget.titleKey] ?? ''}',
+                  maxLines: 2, overflow: TextOverflow.ellipsis),
+              subtitle: sub.isEmpty
+                  ? null
+                  : Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis),
+              onTap: widget.child == null
+                  ? () => _edit(r)
+                  : () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => widget.child!(r)),
+                      ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (widget.extra != null)
+                    IconButton(
+                      tooltip: widget.extraTooltip,
+                      icon: Icon(widget.extraIcon, color: Colors.indigo),
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => widget.extra!(r)),
+                      ),
+                    ),
+                  IconButton(
+                      icon: const Icon(Icons.edit), onPressed: () => _edit(r)),
+                  IconButton(
+                      icon: const Icon(Icons.delete, color: Colors.red),
+                      onPressed: () => _delete(r)),
+                  if (widget.reorder)
+                    ReorderableDragStartListener(
+                      index: i,
+                      child: const Padding(
+                        padding: EdgeInsets.all(8),
+                        child: Icon(Icons.drag_handle),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          }
+
+          final Widget list = rows.isEmpty
+              ? const Center(
+                  child: Text('Is category me abhi kuch nahi hai. Neeche Add dabayein.'))
+              : widget.reorder
+                  ? ReorderableListView.builder(
+                      padding: const EdgeInsets.only(bottom: 90),
+                      itemCount: rows.length,
+                      buildDefaultDragHandles: false,
+                      onReorder: (o, n) => _reorder(all, rows, o, n),
+                      itemBuilder: (context, i) => tile(i),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.only(bottom: 90),
+                      itemCount: rows.length,
+                      itemBuilder: (context, i) => tile(i),
+                    );
+          if (widget.chipsTable == null) return list;
+          return Column(
+            children: [
+              _chipBar(all, sel),
+              Expanded(child: list),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
