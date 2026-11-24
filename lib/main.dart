@@ -969,4 +969,101 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
  src="https://www.youtube.com/embed/$yt?autoplay=1&rel=0&playsinline=1&fs=0&modestbranding=1&enablejsapi=1&origin=https://com.highschool.assam"
  allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
 </body></html>''';
-      _c.loadHtml
+      _c.loadHtmlString(html, baseUrl: 'https://com.highschool.assam');
+    } else {
+      _c.loadRequest(Uri.parse(videoUrl(widget.url)));
+    }
+  }
+
+  // Video ko aage/piche karna ya roknaa/chalana (page ke video element par)
+  void _seek(int sec) => _c.runJavaScript(
+      "var v=document.querySelector('video'); if(v){v.currentTime=Math.max(0,v.currentTime+($sec));}");
+
+  void _toggle() => _c.runJavaScript(
+      "var v=document.querySelector('video'); if(v){ if(v.paused){v.play();}else{v.pause();} }");
+
+  @override
+  void dispose() {
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          Positioned.fill(child: WebViewWidget(controller: _c)),
+          Positioned(
+            top: 8,
+            left: 8,
+            child: SafeArea(
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(30),
+                  onTap: () => Navigator.pop(context),
+                  child: Ink(
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFE91E63), Color(0xFFFF9800)],
+                      ),
+                      borderRadius: BorderRadius.circular(30),
+                      boxShadow: const [
+                        BoxShadow(color: Colors.black54, blurRadius: 6),
+                      ],
+                    ),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.arrow_back, color: Colors.white),
+                          SizedBox(width: 6),
+                          Text('Back',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (_showSeek)
+            Positioned(
+              bottom: 12,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final b in [
+                      [Icons.replay_10, () => _seek(-10)],
+                      [Icons.play_arrow, _toggle],
+                      [Icons.forward_10, () => _seek(10)],
+                    ])
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        child: IconButton(
+                          style: IconButton.styleFrom(
+                              backgroundColor: Colors.black45),
+                          icon: Icon(b[0] as IconData, color: Colors.white70),
+                          onPressed: b[1] as VoidCallback,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
