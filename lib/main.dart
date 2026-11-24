@@ -237,4 +237,144 @@ String? youtubeId(String url) {
   url = url.trim();
   if (RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(url)) return url;
   final m = RegExp(
-          r'(?:youtu\.be/|
+          r'(?:youtu\.be/|youtube\.com/(?:watch\?(?:.*&)?v=|embed/|shorts/|live/))([A-Za-z0-9_-]{11})')
+      .firstMatch(url);
+  return m?.group(1);
+}
+
+/// PDF: Google Drive link ho to /preview, Bunny/koi direct .pdf link ho to Google viewer.
+String pdfUrl(String url) {
+  url = url.trim();
+  final id = _driveId(url);
+  if (id != null) return 'https://drive.google.com/file/d/$id/preview';
+  return 'https://docs.google.com/gview?embedded=true&url=${Uri.encodeComponent(url)}';
+}
+
+final _db = Supabase.instance.client;
+
+/// true: YouTube video seedha watch page se chalta hai (embed error nahi aata).
+/// false: YouTube embed player (abhi 152-4 error de raha hai).
+const bool kYoutubeWatchPage = true;
+
+// ---------------------------------------------------------------------------
+// Generic grid screen: naam + photo wali kisi bhi list ke liye
+// ---------------------------------------------------------------------------
+
+typedef DbRow = Map<String, dynamic>;
+
+class ItemGridScreen extends StatefulWidget {
+  final String title;
+  final String? subtitle;
+  final Future<List<DbRow>> Function() loader;
+  final void Function(BuildContext context, DbRow item) onTap;
+  final IconData fallbackIcon;
+  final int columns;
+  final double aspect;
+  final bool listStyle; // true: ek ke neeche ek, number + photo + naam wali list
+  final bool showBanner; // true: upar greeting + notice banner
+  final DbRow? bannerMedium; // medium chunne ke baad wali screen par medium ki row
+
+  const ItemGridScreen({
+    super.key,
+    required this.title,
+    required this.loader,
+    required this.onTap,
+    this.subtitle,
+    this.fallbackIcon = Icons.menu_book,
+    this.columns = 2,
+    this.aspect = 0.9,
+    this.listStyle = false,
+    this.showBanner = false,
+    this.bannerMedium,
+  });
+
+  @override
+  State<ItemGridScreen> createState() => _ItemGridScreenState();
+}
+
+class _ItemGridScreenState extends State<ItemGridScreen> {
+  late Future<List<DbRow>> _future = widget.loader();
+
+  void _retry() => setState(() => _future = widget.loader());
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.title),
+        backgroundColor: kBrand,
+        foregroundColor: Colors.white,
+        bottom: widget.subtitle == null
+            ? null
+            : PreferredSize(
+                preferredSize: const Size.fromHeight(30),
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Text(widget.subtitle!,
+                      style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                ),
+              ),
+      ),
+      body: Column(
+        children: [
+          if (widget.showBanner) NoticeBanner(medium: widget.bannerMedium),
+          Expanded(
+            child: FutureBuilder<List<DbRow>>(
+        future: _future,
+        builder: (context, snap) {
+          if (snap.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator(color: kBrand));
+          }
+          if (snap.hasError) {
+            return _Message(
+              text: 'Data load nahi hua. Internet check karein.',
+              onRetry: _retry,
+            );
+          }
+          final items = snap.data ?? [];
+          if (items.isEmpty) {
+            return _Message(text: 'Abhi yahan kuch nahi hai.', onRetry: _retry);
+          }
+          if (widget.listStyle) {
+            return ListView.builder(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              itemCount: items.length,
+              itemBuilder: (context, i) {
+                final item = items[i];
+                final img = imageUrl(item['image_url'] as String?);
+                final sub = (item['subtitle'] ?? '').toString();
+                return appCard(
+                  margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: () => widget.onTap(context, item),
+                    child: Padding(
+                      padding: const EdgeInsets.all(10),
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 30,
+                            child: Text('${i + 1}',
+                                style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: kBrand)),
+                          ),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: SizedBox(
+                              width: 80,
+                              height: 80,
+                              child: img.isEmpty
+                                  ? Container(
+                                      color: kThumbBg,
+                                      child: Icon(widget.fallbackIcon,
+                                          size: 36, color: kBrand))
+                                  : CachedNetworkImage(
+                                      imageUrl: img,
+                                      fit: BoxFit.cover,
+                                      placeholder: (_, __) => const Center(
+                                          child: CircularProgressIndicator(strokeWidth: 2)),
+                                      errorWidget: (_, __, ___) => Container(
+                                          color: kThumbBg,
+                                          child: Icon(widget.
