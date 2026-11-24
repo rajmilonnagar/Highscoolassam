@@ -16,6 +16,7 @@ class ChipContentScreen extends StatefulWidget {
 class _ChipContentScreenState extends State<ChipContentScreen> {
   bool _loading = true;
   bool _failed = false;
+  String _err = '';
   List<DbRow> _cats = [];
   Map<dynamic, List<DbRow>> _content = {};
   List<GlobalKey> _keys = [];
@@ -93,6 +94,7 @@ class _ChipContentScreenState extends State<ChipContentScreen> {
       if (!mounted) return;
       setState(() {
         _failed = true;
+        _err = e.toString();
         _loading = false;
       });
     }
@@ -125,7 +127,7 @@ class _ChipContentScreenState extends State<ChipContentScreen> {
       return const Center(child: CircularProgressIndicator(color: kBrand));
     }
     if (_failed) {
-      return _Message(text: 'Data load nahi hua.', onRetry: _load);
+      return _Message(text: 'Data load nahi hua.\n$_err', onRetry: _load);
     }
     if (_cats.isEmpty) {
       return _Message(text: 'Is chapter me material jald aayega.', onRetry: _load);
