@@ -233,4 +233,322 @@ String videoUrl(String url) {
   return url;
 }
 
-/// You
+/// YouTube link ya 11 akshar ki video ID se ID nikalta hai, nahi mile to null.
+String? youtubeId(String url) {
+  url = url.trim();
+  if (RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(url)) return url;
+  final m = RegExp(
+          r'(?:youtu\.be/|youtube\.com/(?:watch\?(?:.*&)?v=|embed/|shorts/|live/))([A-Za-z0-9_-]{11})')
+      .firstMatch(url);
+  return m?.group(1);
+}
+
+/// PDF: Google Drive link ho to /preview, Bunny/koi direct .pdf link ho to Google viewer.
+String pdfUrl(String url) {
+  url = url.trim();
+  final id = _driveId(url);
+  if (id != null) return 'https://drive.google.com/file/d/$id/preview';
+  return 'https://docs.google.com/gview?embedded=true&url=${Uri.encodeComponent(url)}';
+}
+
+final _db = Supabase.instance.client;
+
+/// true: YouTube video seedha watch page se chalta hai (embed error nahi aata).
+/// false: YouTube embed player (abhi 152-4 error de raha hai).
+const bool kYoutubeWatchPage = true;
+
+// ---------------------------------------------------------------------------
+// Generic grid screen: naam + photo wali kisi bhi list ke liye
+// ---------------------------------------------------------------------------
+
+typedef DbRow = Map<String, dynamic>;
+
+class ItemGridScreen extends StatefulWidget {
+  final String title;
+  final String? subtitle;
+  final Future<List<DbRow>> Function() loader;
+  final void Function(BuildContext context, DbRow item) onTap;
+  final IconData fallbackIcon;
+  final int columns;
+  final double aspect;
+  final bool listStyle; // true: ek ke neeche ek, number + photo + naam wali list
+  final bool showBanner; // true: upar greeting + notice banner
+  final DbRow? bannerMedium; // medium chunne ke baad wali screen par medium ki row
+
+  const ItemGridScreen({
+    super.key,
+    required this.title,
+    required this.loader,
+    required this.onTap,
+    this.subtitle,
+    this.fallbackIcon = Icons.menu_book,
+    this.columns = 2,
+    this.aspect = 0.9,
+    this.listStyle = false,
+    this.showBanner = false,
+    this.bannerMedium,
+  });
+
+  @override
+  State<ItemGridScreen> createState() => _ItemGridScreenState();
+}
+
+class _ItemGridScreenState extends State<ItemGridScreen> {
+  late Future<List<DbRow>> _future = widget.loader();
+
+  void _retry() => setState(() => _future = widget.loader());
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.title),
+        backgroundColor: kBrand,
+        foregroundColor: Colors.white,
+        bottom: widget.subtitle == null
+            ? null
+            : PreferredSize(
+                preferredSize: const Size.fromHeight(30),
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Text(widget.subtitle!,
+                      style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                ),
+              ),
+      ),
+      body: Column(
+        children: [
+          if (widget.showBanner) NoticeBanner(medium: widget.bannerMedium),
+          Expanded(
+            child: FutureBuilder<List<DbRow>>(
+        future: _future,
+        builder: (context, snap) {
+          if (snap.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator(color: kBrand));
+          }
+          if (snap.hasError) {
+            return _Message(
+              text: 'Data load nahi hua. Internet check karein.',
+              onRetry: _retry,
+            );
+          }
+          final items = snap.data ?? [];
+          if (items.isEmpty) {
+            return _Message(text: 'Abhi yahan kuch nahi hai.', onRetry: _retry);
+          }
+          if (widget.listStyle) {
+            return ListView.builder(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              itemCount: items.length,
+              itemBuilder: (context, i) {
+                final item = items[i];
+                final img = imageUrl(item['image_url'] as String?);
+                final sub = (item['subtitle'] ?? '').toString();
+                return appCard(
+                  margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: () => widget.onTap(context, item),
+                    child: Padding(
+                      padding: const EdgeInsets.all(10),
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 30,
+                            child: Text('${i + 1}',
+                                style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: kBrand)),
+                          ),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: SizedBox(
+                              width: 80,
+                              height: 80,
+                              child: img.isEmpty
+                                  ? Container(
+                                      color: kThumbBg,
+                                      child: Icon(widget.fallbackIcon,
+                                          size: 36, color: kBrand))
+                                  : CachedNetworkImage(
+                                      imageUrl: img,
+                                      fit: BoxFit.cover,
+                                      placeholder: (_, __) => const Center(
+                                          child: CircularProgressIndicator(strokeWidth: 2)),
+                                      errorWidget: (_, __, ___) => Container(
+                                          color: kThumbBg,
+                                          child: Icon(widget.fallbackIcon,
+                                              size: 36, color: kBrand)),
+                                    ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('${item['name'] ?? ''}',
+                                    style: const TextStyle(
+                                        fontSize: 17,
+                                        fontWeight: FontWeight.w700,
+                                        color: Color(0xFF1F2937)),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis),
+                                if (sub.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 4),
+                                    child: Text(sub,
+                                        style: const TextStyle(color: kGrey, fontSize: 13),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            );
+          }
+          return GridView.builder(
+            padding: const EdgeInsets.all(12),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: widget.columns,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              childAspectRatio: widget.aspect,
+            ),
+            itemCount: items.length,
+            itemBuilder: (context, i) {
+              final item = items[i];
+              final img = imageUrl(item['image_url'] as String?);
+              return GestureDetector(
+                onTap: () => widget.onTap(context, item),
+                child: appCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: Container(
+                          color: kThumbBg,
+                          child: img.isEmpty
+                              ? Icon(widget.fallbackIcon, size: 50, color: kBrand)
+                              : CachedNetworkImage(
+                                  imageUrl: img,
+                                  fit: BoxFit.cover,
+                                  placeholder: (_, __) => const Center(
+                                      child: CircularProgressIndicator(strokeWidth: 2)),
+                                  errorWidget: (_, __, ___) => Icon(widget.fallbackIcon,
+                                      size: 50, color: kBrand),
+                                ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: Text(
+                          (item['name'] ?? '') as String,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 16,
+                              color: Color(0xFF1F2937)),
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Message extends StatelessWidget {
+  final String text;
+  final VoidCallback onRetry;
+  const _Message({required this.text, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(text, style: const TextStyle(color: kGrey, fontSize: 16)),
+          const SizedBox(height: 12),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+                backgroundColor: kBrand, foregroundColor: Colors.white),
+            onPressed: onRetry,
+            child: const Text('Dobara try karein'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 2. Medium -> 3. Class -> 4. Subject -> 5. Chapter -> 6. Content
+// ---------------------------------------------------------------------------
+
+class MediumSelectionScreen extends StatelessWidget {
+  final String deviceId;
+  final int remainingDays;
+  const MediumSelectionScreen({super.key, required this.deviceId, required this.remainingDays});
+
+  @override
+  Widget build(BuildContext context) {
+    final shortId = deviceId.length > 6 ? deviceId.substring(0, 6) : deviceId;
+    return ColorRowsScreen(
+      title: 'Select Medium',
+      subtitle: 'ID: $shortId... | Free Trial: $remainingDays Days Left',
+      fallbackIcon: Icons.school,
+      badge: 'symbol',
+      showBanner: true,
+      loader: () async => List<DbRow>.from(
+          await _db.from('mediums').select().order('sort_order', ascending: true)),
+      onTap: (context, medium) => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => ClassListScreen(medium: medium)),
+      ),
+    );
+  }
+}
+
+class ClassListScreen extends StatelessWidget {
+  final DbRow medium;
+  const ClassListScreen({super.key, required this.medium});
+
+  @override
+  Widget build(BuildContext context) {
+    return ItemGridScreen(
+      title: '${medium['name']} - Classes',
+      fallbackIcon: Icons.class_,
+      aspect: 1.1,
+      showBanner: true,
+      bannerMedium: medium,
+      loader: () async => List<DbRow>.from(
+          await _db.from('classes').select().order('sort_order', ascending: true)),
+      onTap: (context, cls) => Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => SubjectListScreen(medium: medium, cls: cls)),
+      ),
+    );
+  }
+}
+
+class SubjectList
