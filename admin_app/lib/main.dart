@@ -384,4 +384,207 @@ class _TableScreenState extends State<TableScreen> {
         }
       }
     } catch (e) {
-      _msg('Drop
+      _msg('Dropdown load nahi hua: $e');
+      return;
+    }
+    // Naye row me order apne aap agla number
+    if (row == null) {
+      final list = await _future;
+      for (final f in widget.fields) {
+        if (f.number && ctrls[f.key]!.text.isEmpty) {
+          ctrls[f.key]!.text = '${list.length + 1}';
+        }
+        if (f.options != null && ctrls[f.key]!.text.isEmpty) {
+          ctrls[f.key]!.text = f.options!.first;
+        }
+        if (f.fromTable != null &&
+            ctrls[f.key]!.text.isEmpty &&
+            (choices[f.key] ?? []).isNotEmpty) {
+          ctrls[f.key]!.text = '${choices[f.key]!.first['id']}';
+        }
+        if (widget.chipsTable != null && f.key == widget.chipsKey) {
+          final cur = _chipSel;
+          if (cur != null &&
+              cur != '_none' &&
+              _chips.any((c) => '${c['id']}' == cur)) {
+            ctrls[f.key]!.text = cur;
+          }
+        }
+      }
+    }
+    if (!mounted) return;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(row == null ? 'Naya add karein' : 'Badlein'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final f in widget.fields)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: f.fromTable != null
+                      ? DropdownButtonFormField<String>(
+                          isExpanded: true,
+                          value: (choices[f.key] ?? <DbRow>[])
+                                  .any((r) => '${r['id']}' == ctrls[f.key]!.text)
+                              ? ctrls[f.key]!.text
+                              : null,
+                          decoration: InputDecoration(
+                              labelText: f.label,
+                              border: const OutlineInputBorder()),
+                          items: [
+                            for (final r in choices[f.key] ?? <DbRow>[])
+                              DropdownMenuItem(
+                                  value: '${r['id']}',
+                                  child: Text('${r[f.labelKey]}'))
+                          ],
+                          onChanged: (v) => ctrls[f.key]!.text = v ?? '',
+                        )
+                      : f.options != null
+                      ? DropdownButtonFormField<String>(
+                          value: ctrls[f.key]!.text,
+                          decoration: InputDecoration(
+                              labelText: f.label,
+                              border: const OutlineInputBorder()),
+                          items: [
+                            for (final o in f.options!)
+                              DropdownMenuItem(value: o, child: Text(o))
+                          ],
+                          onChanged: (v) => ctrls[f.key]!.text = v ?? '',
+                        )
+                      : TextField(
+                          controller: ctrls[f.key],
+                          keyboardType:
+                              f.number ? TextInputType.number : TextInputType.text,
+                          minLines: f.multiline ? 3 : 1,
+                          maxLines: f.multiline ? 6 : 2,
+                          decoration: InputDecoration(
+                              labelText: f.label,
+                              border: const OutlineInputBorder()),
+                        ),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    final vals = <String, dynamic>{};
+    for (final f in widget.fields) {
+      final t = ctrls[f.key]!.text.trim();
+      if (f.number) {
+        vals[f.key] = int.tryParse(t) ?? 0;
+      } else if (f.fromTable != null) {
+        vals[f.key] = t.isEmpty ? null : (int.tryParse(t) ?? t);
+        final sel = (choices[f.key] ?? <DbRow>[]).where((r) => '${r['id']}' == t);
+        if (sel.isNotEmpty) {
+          f.copy.forEach((from, to) => vals[to] = sel.first[from]);
+        }
+      } else {
+        vals[f.key] = t.isEmpty ? null : t;
+      }
+    }
+    if (vals[widget.titleKey] == null) {
+      _msg('Naam / title khali nahi ho sakta');
+      return;
+    }
+
+    try {
+      if (row == null) {
+        await db.from(widget.table).insert({...widget.filter, ...vals});
+      } else {
+        await db.from(widget.table).update(vals).eq('id', row['id']);
+      }
+      _msg('Save ho gaya');
+      _refresh();
+    } catch (e) {
+      _msg('Save nahi hua: $e');
+    }
+  }
+
+  Future<void> _bulkAdd() async {
+    final ctrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Ek saath kai add karein'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Har naam alag line me likhein ya paste karein. Order apne aap 1,2,3... lagega.'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: ctrl,
+                minLines: 6,
+                maxLines: 12,
+                decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    hintText: 'Pehla naam\nDusra naam\nTeesra naam'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Add')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final names = ctrl.text
+        .split('\n')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    if (names.isEmpty) return;
+    try {
+      final list = await _future;
+      var n = list.length;
+      final rows = <Map<String, dynamic>>[
+        for (final name in names)
+          {...widget.filter, widget.titleKey: name, 'sort_order': ++n}
+      ];
+      await db.from(widget.table).insert(rows);
+      _msg('${names.length} add ho gaye');
+      _refresh();
+    } catch (e) {
+      _msg('Save nahi hua: $e');
+    }
+  }
+
+  Future<void> _delete(DbRow row) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete karein?'),
+        content: Text(
+            '"${row[widget.titleKey]}" hat jayega. Iske andar ka sab data bhi hat jayega.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Nahi')),
+          FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Haan, delete')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await db.from(widget.table).delete().eq('id', row['id']);
+      _refresh();
+    } catch (e) {
+      _msg('Delete nahi hua: $e');
+    }
+  }
+
+  @override
+  Widget build(Build
