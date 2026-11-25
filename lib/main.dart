@@ -43,15 +43,6 @@ void main() async {
   runApp(const MyApp());
 }
 
-ThemeData _buildTheme() {
-  final base = ThemeData(
-    colorScheme: ColorScheme.fromSeed(seedColor: kBrand),
-    scaffoldBackgroundColor: kBg,
-    useMaterial3: true,
-  );
-  return base.copyWith(textTheme: GoogleFonts.poppinsTextTheme(base.textTheme));
-}
-
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
