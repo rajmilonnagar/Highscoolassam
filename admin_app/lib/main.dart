@@ -747,4 +747,416 @@ class _TableScreenState extends State<TableScreen> {
                                 onTap: () async {
                                   await Navigator.push(
                                     ctx,
-                                    Material
+                                    MaterialPageRoute<void>(
+                                      fullscreenDialog: true,
+                                      builder: (c2) => Scaffold(
+                                        appBar: AppBar(
+                                          title: Text(f.label,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () =>
+                                                  Navigator.pop(c2),
+                                              child: const Text('Done'),
+                                            ),
+                                          ],
+                                        ),
+                                        body: SafeArea(
+                                          child: Padding(
+                                            padding: const EdgeInsets.all(12),
+                                            child: TextField(
+                                              controller: ctrls[f.key],
+                                              autofocus: true,
+                                              expands: true,
+                                              minLines: null,
+                                              maxLines: null,
+                                              textAlignVertical:
+                                                  TextAlignVertical.top,
+                                              keyboardType:
+                                                  TextInputType.multiline,
+                                              decoration: const InputDecoration(
+                                                  border:
+                                                      OutlineInputBorder()),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                  setS(() {});
+                                },
+                                child: InputDecorator(
+                                  decoration: InputDecoration(
+                                    labelText: f.label,
+                                    border: const OutlineInputBorder(),
+                                    suffixIcon:
+                                        const Icon(Icons.open_in_full),
+                                  ),
+                                  child: Text(
+                                    ctrls[f.key]!.text.isEmpty
+                                        ? 'Dabakar likhein...'
+                                        : ctrls[f.key]!.text,
+                                    maxLines: 4,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              )
+                        : f.options != null
+                            ? DropdownButtonFormField<String>(
+                                value: ctrls[f.key]!.text,
+                                decoration: InputDecoration(
+                                    labelText: f.label,
+                                    border: const OutlineInputBorder()),
+                                items: [
+                                  for (final o in f.options!)
+                                    DropdownMenuItem(value: o, child: Text(o))
+                                ],
+                                onChanged: (v) => ctrls[f.key]!.text = v ?? '',
+                              )
+                            : TextField(
+                                controller: ctrls[f.key],
+                                keyboardType: f.multiline
+                                    ? TextInputType.multiline
+                                    : f.number
+                                        ? TextInputType.number
+                                        : TextInputType.text,
+                                minLines: f.multiline ? 8 : 1,
+                                maxLines: f.multiline ? null : 3,
+                                decoration: InputDecoration(
+                                    labelText: f.label,
+                                    alignLabelWithHint: f.multiline,
+                                    border: const OutlineInputBorder()),
+                              ),
+                  ),
+                const SizedBox(height: 24),
+                FilledButton.icon(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  icon: const Icon(Icons.check),
+                  label: const Text('Save'),
+                ),
+              ],
+            ),
+          ),
+        )),
+      ),
+    );
+    if (ok != true) return;
+
+    final vals = <String, dynamic>{};
+    for (final f in widget.fields) {
+      if (!shown(f)) continue;
+      final t = ctrls[f.key]!.text.trim();
+      if (f.number) {
+        vals[f.key] = int.tryParse(t) ?? 0;
+      } else if (f.fromTable != null) {
+        vals[f.key] = t.isEmpty ? null : (int.tryParse(t) ?? t);
+        final sel = (choices[f.key] ?? <DbRow>[]).where((r) => '${r['id']}' == t);
+        if (sel.isNotEmpty) {
+          f.copy.forEach((from, to) => vals[to] = sel.first[from]);
+        }
+      } else {
+        vals[f.key] = t.isEmpty ? null : t;
+      }
+    }
+    if (widget.modeSelect) {
+      final shownKeys = {
+        for (final f in widget.fields)
+          if (shown(f)) f.key
+      };
+      for (final f in widget.fields) {
+        if (!shownKeys.contains(f.key)) vals[f.key] = null;
+      }
+      vals['type'] = mode == 'single_video'
+          ? 'video'
+          : mode == 'text_file'
+              ? 'pdf'
+              : 'qa';
+    }
+    if (widget.modeSelect && vals[widget.titleKey] == null) {
+      vals[widget.titleKey] = '';
+    }
+    if (vals[widget.titleKey] == null) {
+      _msg('Naam / title khali nahi ho sakta');
+      return;
+    }
+
+    try {
+      if (row == null) {
+        final cur = await _future;
+        var mx = 0;
+        for (final r in cur) {
+          final v = (num.tryParse('${r['sort_order']}') ?? 0).toInt();
+          if (v > mx) mx = v;
+        }
+        await db
+            .from(widget.table)
+            .insert({'sort_order': mx + 1, ...widget.filter, ...vals});
+      } else {
+        await db.from(widget.table).update(vals).eq('id', row['id']);
+      }
+      _msg('Save ho gaya');
+      _refresh();
+    } catch (e) {
+      _msg('Save nahi hua: $e');
+    }
+  }
+
+  Future<void> _bulkAdd() async {
+    final ctrl = TextEditingController();
+    final ok = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute<bool>(
+        fullscreenDialog: true,
+        builder: (ctx) => Scaffold(
+          appBar: AppBar(
+            leading: IconButton(
+              icon: const Icon(Icons.close),
+              onPressed: () => Navigator.pop(ctx, false),
+            ),
+            title: const Text('Ek saath kai add karein'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Add'),
+              ),
+            ],
+          ),
+          body: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  const Text(
+                      'Har naam alag line me likhein ya paste karein. Order apne aap 1,2,3... lagega.'),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: ctrl,
+                      expands: true,
+                      minLines: null,
+                      maxLines: null,
+                      textAlignVertical: TextAlignVertical.top,
+                      keyboardType: TextInputType.multiline,
+                      decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                          hintText: 'Pehla naam\nDusra naam\nTeesra naam'),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: const Text('Add'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final names = ctrl.text
+        .split('\n')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    if (names.isEmpty) return;
+    try {
+      final list = await _future;
+      var n = list.length;
+      final rows = <Map<String, dynamic>>[
+        for (final name in names)
+          {...widget.filter, widget.titleKey: name, 'sort_order': ++n}
+      ];
+      await db.from(widget.table).insert(rows);
+      _msg('${names.length} add ho gaye');
+      _refresh();
+    } catch (e) {
+      _msg('Save nahi hua: $e');
+    }
+  }
+
+  Future<void> _delete(DbRow row) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete karein?'),
+        content: Text(
+            '"${row[widget.titleKey]}" hat jayega. Iske andar ka sab data bhi hat jayega.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Nahi')),
+          FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Haan, delete')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await db.from(widget.table).delete().eq('id', row['id']);
+      _refresh();
+    } catch (e) {
+      _msg('Delete nahi hua: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.title),
+        actions: [
+          if (widget.bulk)
+            IconButton(
+              tooltip: 'Ek saath kai add karein',
+              icon: const Icon(Icons.playlist_add),
+              onPressed: _bulkAdd,
+            ),
+          if (widget.isRoot)
+            PopupMenuButton<String>(
+              tooltip: 'Categories / Notice',
+              icon: const Icon(Icons.tune),
+              onSelected: (v) {
+                final Widget page = v == 'cat'
+                    ? const CategoryManagerScreen()
+                    : v == 'cls'
+                        ? const ClassCategorySetupScreen()
+                        : v == 'design'
+                            ? const DesignScreen()
+                            : const NoticeManagerScreen();
+                Navigator.push(
+                    context, MaterialPageRoute(builder: (_) => page));
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'cat', child: Text('Categories')),
+                PopupMenuItem(
+                    value: 'cls', child: Text('Class ke hisab se categories')),
+                PopupMenuItem(value: 'notice', child: Text('Notice / Banner')),
+                PopupMenuItem(value: 'design', child: Text('App Design')),
+              ],
+            ),
+          if (widget.isRoot)
+            IconButton(
+              tooltip: 'Logout',
+              icon: const Icon(Icons.logout),
+              onPressed: () => db.auth.signOut(),
+            ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _edit(),
+        icon: const Icon(Icons.add),
+        label: const Text('Add'),
+      ),
+      body: FutureBuilder<List<DbRow>>(
+        future: _future,
+        builder: (context, snap) {
+          if (snap.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snap.hasError) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('Data nahi aaya:\n${snap.error}', textAlign: TextAlign.center),
+                    const SizedBox(height: 12),
+                    FilledButton(onPressed: _refresh, child: const Text('Dobara try karein')),
+                  ],
+                ),
+              ),
+            );
+          }
+          final all = snap.data ?? [];
+          if (all.isEmpty && widget.chipsTable == null) {
+            return const Center(child: Text('Abhi kuch nahi hai. Neeche Add dabayein.'));
+          }
+          final hasNone = all.any((r) => _chipOf(r) == null);
+          final sel = _effectiveChip(hasNone);
+          final rows = widget.chipsTable == null
+              ? all
+              : all.where((r) => (_chipOf(r) ?? '_none') == sel).toList();
+          Widget tile(int i) {
+            final r = rows[i];
+            final sub = widget.subtitleKey == null
+                ? ''
+                : '${r[widget.subtitleKey] ?? ''}';
+            return ListTile(
+              key: ValueKey('${r['id']}'),
+              leading: _leading(r, i),
+              title: Text(_rowLabel(r),
+                  maxLines: 2, overflow: TextOverflow.ellipsis),
+              subtitle: sub.isEmpty
+                  ? null
+                  : Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis),
+              onTap: widget.child == null
+                  ? () => _edit(r)
+                  : () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => widget.child!(r)),
+                      ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (widget.extra != null)
+                    IconButton(
+                      tooltip: widget.extraTooltip,
+                      icon: Icon(widget.extraIcon, color: Colors.indigo),
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => widget.extra!(r)),
+                      ),
+                    ),
+                  IconButton(
+                      icon: const Icon(Icons.edit), onPressed: () => _edit(r)),
+                  IconButton(
+                      icon: const Icon(Icons.delete, color: Colors.red),
+                      onPressed: () => _delete(r)),
+                  if (widget.reorder)
+                    ReorderableDragStartListener(
+                      index: i,
+                      child: const Padding(
+                        padding: EdgeInsets.all(8),
+                        child: Icon(Icons.drag_handle),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          }
+
+          final Widget list = rows.isEmpty
+              ? const Center(
+                  child: Text('Is category me abhi kuch nahi hai. Neeche Add dabayein.'))
+              : widget.reorder
+                  ? ReorderableListView.builder(
+                      padding: const EdgeInsets.only(bottom: 90),
+                      itemCount: rows.length,
+                      buildDefaultDragHandles: false,
+                      onReorder: (o, n) => _reorder(all, rows, o, n),
+                      itemBuilder: (context, i) => tile(i),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.only(bottom: 90),
+                      itemCount: rows.length,
+                      itemBuilder: (context, i) => tile(i),
+                    );
+          if (widget.chipsTable == null) return list;
+          return Column(
+            children: [
+              _chipBar(all, sel),
+              Expanded(child: list),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
