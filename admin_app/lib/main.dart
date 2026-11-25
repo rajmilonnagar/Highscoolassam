@@ -200,4 +200,188 @@ Widget contentsScreen(DbRow ch) => TableScreen(
       table: 'contents',
       filter: {'chapter_id': ch['id']},
       fields: const [
-        F('category_id', 'Category (database se)', from
+        F('category_id', 'Category (database se)', fromTable: 'categories', copy: {'type': 'type'}),
+        F('title', 'Title (Book me neeche ka naam, jaise A for Apple)'),
+        F('url', 'Link (video ya MCQ pdf)'),
+        F('image_url', 'Photo 1 (video ka thumbnail / Book me BAAYEIN card)'),
+        F('image_url2', 'Photo 2 (sirf Book me DAAYEIN card)'),
+        F('body', 'Chhota text (Book me, optional)', multiline: true),
+        F('sort_order', 'Order (1,2,3...)', number: true),
+      ],
+      titleKey: 'title',
+      subtitleKey: 'type',
+      chipsTable: 'categories', // upar category chips, dabane par sirf usi ka content
+      chipsFallbackKey: 'type', // purani rows (category khali) type se jud jati hain
+    );
+
+// ---------------------------------------------------------------------------
+// Generic table screen: list + add + edit + delete
+// ---------------------------------------------------------------------------
+
+class F {
+  final String key;
+  final String label;
+  final bool multiline;
+  final bool number;
+  final List<String>? options;
+  // Dropdown jo database ki table se aata hai (jaise categories)
+  final String? fromTable;
+  final String labelKey; // dropdown me kaun sa column dikhe
+  final Map<String, String> copy; // chuni row ka column -> is row ke column me copy
+  const F(this.key, this.label,
+      {this.multiline = false,
+      this.number = false,
+      this.options,
+      this.fromTable,
+      this.labelKey = 'name',
+      this.copy = const {}});
+}
+
+class TableScreen extends StatefulWidget {
+  final String title;
+  final String table;
+  final Map<String, dynamic> filter;
+  final List<F> fields;
+  final String titleKey;
+  final String? subtitleKey;
+  final Widget Function(DbRow row)? child;
+  final bool isRoot;
+  final List<String> nullFilter; // in columns ka value khali (null) wale hi dikhao
+  final Widget Function(DbRow row)? extra; // doosra button (jaise sub-chapters)
+  final IconData extraIcon;
+  final String extraTooltip;
+  final bool bulk; // ek saath kai naam add karne ka button
+  // Upar chips: is table (jaise 'categories') ki rows chips banengi, aur list us chip ki rows tak simit rahegi
+  final String? chipsTable;
+  final String chipsKey; // is screen ki row ka column jo chip se jodta hai
+  final String chipsLabelKey; // chip par kya likha dikhe
+  final String? chipsFallbackKey; // chipsKey khali ho to is column se milao (jaise type)
+
+  const TableScreen({
+    super.key,
+    required this.title,
+    required this.table,
+    required this.fields,
+    required this.titleKey,
+    this.filter = const {},
+    this.subtitleKey,
+    this.child,
+    this.isRoot = false,
+    this.nullFilter = const [],
+    this.extra,
+    this.extraIcon = Icons.more_horiz,
+    this.extraTooltip = '',
+    this.bulk = false,
+    this.chipsTable,
+    this.chipsKey = 'category_id',
+    this.chipsLabelKey = 'name',
+    this.chipsFallbackKey,
+  });
+
+  @override
+  State<TableScreen> createState() => _TableScreenState();
+}
+
+class _TableScreenState extends State<TableScreen> {
+  late Future<List<DbRow>> _future = _load();
+  List<DbRow> _chips = [];
+  String? _chipSel;
+
+  // Kis row ka kaun sa chip. Purani rows (category khali) type se jodi jati hain.
+  String? _chipOf(DbRow r) {
+    final v = r[widget.chipsKey];
+    if (v != null && _chips.any((c) => '${c['id']}' == '$v')) return '$v';
+    final fb = widget.chipsFallbackKey;
+    if (v == null && fb != null) {
+      final m = _chips.where((c) => c[fb] == r[fb]);
+      if (m.isNotEmpty) return '${m.first['id']}';
+    }
+    return null;
+  }
+
+  String _effectiveChip(bool hasNone) {
+    final ids = _chips.map((c) => '${c['id']}').toList();
+    final cur = _chipSel;
+    if (cur != null && (ids.contains(cur) || (cur == '_none' && hasNone))) {
+      return cur;
+    }
+    return ids.isNotEmpty ? ids.first : '_none';
+  }
+
+  Widget _chipBar(List<DbRow> all, String sel) {
+    final counts = <String, int>{};
+    for (final r in all) {
+      final k = _chipOf(r) ?? '_none';
+      counts[k] = (counts[k] ?? 0) + 1;
+    }
+    final items = <MapEntry<String, String>>[
+      for (final c in _chips)
+        MapEntry('${c['id']}', '${c[widget.chipsLabelKey]}'),
+      if ((counts['_none'] ?? 0) > 0) const MapEntry('_none', 'Bina category'),
+    ];
+    return SizedBox(
+      height: 54,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        children: [
+          for (final it in items)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: ChoiceChip(
+                label: Text('${it.value} (${counts[it.key] ?? 0})'),
+                selected: it.key == sel,
+                onSelected: (_) => setState(() => _chipSel = it.key),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<List<DbRow>> _load() async {
+    if (widget.chipsTable != null) {
+      final c = await db
+          .from(widget.chipsTable!)
+          .select()
+          .order('sort_order', ascending: true);
+      _chips = List<DbRow>.from(c);
+    }
+    var q = db.from(widget.table).select();
+    widget.filter.forEach((k, v) {
+      q = q.eq(k, v);
+    });
+    for (final k in widget.nullFilter) {
+      q = q.isFilter(k, null);
+    }
+    final data = await q.order('sort_order', ascending: true).order('id', ascending: true);
+    return List<DbRow>.from(data);
+  }
+
+  void _refresh() => setState(() => _future = _load());
+
+  void _msg(String text) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+  }
+
+  Future<void> _edit([DbRow? row]) async {
+    final ctrls = {
+      for (final f in widget.fields)
+        f.key: TextEditingController(
+            text: row?[f.key] == null ? '' : '${row![f.key]}')
+    };
+    // Database se aane wale dropdown (jaise categories) pehle load karein
+    final choices = <String, List<DbRow>>{};
+    try {
+      for (final f in widget.fields) {
+        if (f.fromTable != null) {
+          final data = await db
+              .from(f.fromTable!)
+              .select()
+              .order('sort_order', ascending: true);
+          choices[f.key] = List<DbRow>.from(data);
+        }
+      }
+    } catch (e) {
+      _msg('Drop
