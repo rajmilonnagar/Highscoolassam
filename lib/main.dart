@@ -32,35 +32,6 @@ Card appCard({required Widget child, EdgeInsetsGeometry? margin}) => Card(
       child: child,
     );
 
-/// Admin ke "App Design" se aane wali settings (internet na ho to purane rang)
-class AppDesign {
-  static Color brand = kBrand;
-  static Color bg = kBg;
-  static bool titleLow = false;
-
-  static Color _hex(dynamic v, Color d) {
-    var s = '${v ?? ''}'.replaceAll('#', '').trim();
-    if (s.length == 6) s = 'FF$s';
-    final n = int.tryParse(s, radix: 16);
-    return n == null ? d : Color(n);
-  }
-
-  static Future<void> load() async {
-    try {
-      final r = await Supabase.instance.client
-          .from('app_design')
-          .select()
-          .eq('id', 1)
-          .maybeSingle()
-          .timeout(const Duration(seconds: 4));
-      if (r == null) return;
-      brand = _hex(r['brand_color'], kBrand);
-      bg = _hex(r['bg_color'], kBg);
-      titleLow = r['title_low'] == true;
-    } catch (_) {}
-  }
-}
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Supabase initialize karein (apni credentials yahan dalein)
