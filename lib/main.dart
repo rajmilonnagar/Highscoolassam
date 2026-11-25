@@ -712,4 +712,418 @@ class _ContentScreenState extends State<ContentScreen> {
   }
 }
 
-class _FileList extends Stateless
+class _FileList extends StatelessWidget {
+  final List<DbRow> items;
+  final IconData icon;
+  final String empty;
+  final String Function(DbRow) open;
+  final bool isVideo;
+  const _FileList(
+      {required this.items,
+      required this.icon,
+      required this.empty,
+      required this.open,
+      this.isVideo = false});
+
+  // Photo: pehle aapka diya image_url, nahi to YouTube ka apna thumbnail, nahi to icon
+  Widget _img(DbRow r, double iconSize) {
+    var img = imageUrl(r['image_url'] as String?);
+    if (img.isEmpty && isVideo) {
+      final yt = youtubeId((r['url'] ?? '').toString());
+      if (yt != null) img = 'https://img.youtube.com/vi/$yt/hqdefault.jpg';
+    }
+    final fallback = Container(
+      color: kThumbBg,
+      child: Center(child: Icon(icon, color: kBrand, size: iconSize)),
+    );
+    if (img.isEmpty) return fallback;
+    return CachedNetworkImage(
+      imageUrl: img,
+      fit: BoxFit.cover,
+      width: double.infinity,
+      height: double.infinity,
+      placeholder: (_, __) => Container(color: kThumbBg),
+      errorWidget: (_, __, ___) => fallback,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) {
+      return Center(child: Text(empty, style: const TextStyle(color: kGrey, fontSize: 18)));
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: items.length,
+      itemBuilder: (context, i) {
+        final r = items[i];
+        void openIt() => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (_) => isVideo
+                      ? VideoPlayerScreen(url: open(r))
+                      : WebViewScreen(title: '${r['title']}', url: open(r))),
+            );
+        final title = Text(
+          '${r['title']}',
+          style: const TextStyle(
+              fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF1F2937)),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        );
+        return appCard(
+          margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          child: InkWell(
+            onTap: openIt,
+            child: isVideo
+                // Video: bada card, upar 16:9 photo, neeche title
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      AspectRatio(
+                        aspectRatio: 16 / 9,
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            _img(r, 56),
+                            Center(
+                              child: Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: const BoxDecoration(
+                                    color: Colors.black45, shape: BoxShape.circle),
+                                child: const Icon(Icons.play_arrow,
+                                    color: Colors.white, size: 34),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                        child: title,
+                      ),
+                    ],
+                  )
+                // PDF: chhota photo/icon baayein, title daayein
+                : Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Row(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: SizedBox(width: 72, height: 72, child: _img(r, 34)),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(child: title),
+                      ],
+                    ),
+                  ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _QaList extends StatelessWidget {
+  final List<DbRow> items;
+  const _QaList({required this.items});
+
+  // Ek square safed card me photo (poori dikhe, kate nahi)
+  Widget _pic(String? raw) {
+    final img = imageUrl(raw);
+    return appCard(
+      child: AspectRatio(
+        aspectRatio: 1,
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: img.isEmpty
+              ? const Center(child: Icon(Icons.image_outlined, size: 48, color: kThumbBg))
+              : CachedNetworkImage(
+                  imageUrl: img,
+                  fit: BoxFit.contain,
+                  placeholder: (_, __) =>
+                      const Center(child: CircularProgressIndicator(strokeWidth: 2, color: kBrand)),
+                  errorWidget: (_, __, ___) => const Center(
+                      child: Icon(Icons.broken_image_outlined, size: 48, color: kGrey)),
+                ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) {
+      return const Center(
+          child: Text('Book jald aayegi', style: TextStyle(color: kGrey, fontSize: 18)));
+    }
+    return ListView.builder(
+      itemCount: items.length,
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
+      itemBuilder: (context, i) {
+        final r = items[i];
+        final title = '${r['title'] ?? ''}';
+        final body = '${r['body'] ?? ''}';
+        final hasPics = (r['image_url'] ?? '').toString().trim().isNotEmpty ||
+            (r['image_url2'] ?? '').toString().trim().isNotEmpty;
+
+        // Photo nahi hai: link ho to ek tap me seedha file khule
+        if (!hasPics) {
+          final urlCol = '${r['url'] ?? ''}'.trim();
+          final link = RegExp(r'^https?://\S+$').hasMatch(urlCol)
+              ? urlCol
+              : (RegExp(r'^https?://\S+$').hasMatch(body.trim())
+                  ? body.trim()
+                  : '');
+          if (link.isNotEmpty) {
+            return appCard(
+              margin: const EdgeInsets.symmetric(vertical: 7),
+              child: InkWell(
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) =>
+                          WebViewScreen(title: title, url: pdfUrl(link))),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.description, color: kBrand),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(title,
+                            style: const TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.bold)),
+                      ),
+                      const Icon(Icons.chevron_right, color: kGrey),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }
+          // Link nahi hai (sirf text): card shuru se khula rahe
+          return appCard(
+            margin: const EdgeInsets.symmetric(vertical: 7),
+            child: ExpansionTile(
+              initiallyExpanded: true,
+              shape: const Border(),
+              collapsedShape: const Border(),
+              title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+              childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              expandedAlignment: Alignment.centerLeft,
+              children: [Text(body)],
+            ),
+          );
+        }
+
+        // Do card ek line me: baayein A ka photo, daayein Apple ka photo
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 22),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Expanded(child: _pic(r['image_url'] as String?)),
+                  const SizedBox(width: 14),
+                  Expanded(child: _pic(r['image_url2'] as String?)),
+                ],
+              ),
+              if (title.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Text(
+                    title,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        fontSize: 20, fontWeight: FontWeight.w700, color: Color(0xFF1F2937)),
+                  ),
+                ),
+              if (body.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(body,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 14, color: kGrey)),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+// Video aur PDF dono isi me khulte hain
+
+class WebViewScreen extends StatefulWidget {
+  final String title;
+  final String url;
+  const WebViewScreen({super.key, required this.title, required this.url});
+
+  @override
+  State<WebViewScreen> createState() => _WebViewScreenState();
+}
+
+class _WebViewScreenState extends State<WebViewScreen> {
+  late final WebViewController _c = WebViewController()
+    ..setJavaScriptMode(JavaScriptMode.unrestricted)
+    ..setBackgroundColor(Colors.black)
+    ..loadRequest(Uri.parse(widget.url));
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.title),
+        backgroundColor: kBrand,
+        foregroundColor: Colors.white,
+      ),
+      body: WebViewWidget(controller: _c),
+    );
+  }
+}
+
+
+// Video: click karte hi full screen (landscape), back dabate hi chapter me wapas
+
+class VideoPlayerScreen extends StatefulWidget {
+  final String url;
+  const VideoPlayerScreen({super.key, required this.url});
+
+  @override
+  State<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
+}
+
+class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
+  late final WebViewController _c;
+  bool _showSeek = false;
+
+  @override
+  void initState() {
+    super.initState();
+    SystemChrome.setPreferredOrientations(
+        [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+
+    _c = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(Colors.black);
+
+    if (_c.platform is AndroidWebViewController) {
+      (_c.platform as AndroidWebViewController)
+          .setMediaPlaybackRequiresUserGesture(false);
+    }
+
+    final yt = youtubeId(widget.url);
+    if (yt != null && kYoutubeWatchPage) {
+      // YouTube ka embed 152-4 error deta hai, isliye seedha watch page kholte hain.
+      _c.loadRequest(Uri.parse('https://m.youtube.com/watch?v=$yt'));
+    } else if (yt != null) {
+      // rel=0: sirf aapke channel ke suggestions, fs=0: YouTube ka fullscreen button nahi
+      final html = '''
+<html><body style="margin:0;background:#000">
+<iframe style="position:fixed;inset:0;width:100%;height:100%;border:0"
+ src="https://www.youtube.com/embed/$yt?autoplay=1&rel=0&playsinline=1&fs=0&modestbranding=1&enablejsapi=1&origin=https://com.highschool.assam"
+ allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+</body></html>''';
+      _c.loadHtmlString(html, baseUrl: 'https://com.highschool.assam');
+    } else {
+      _c.loadRequest(Uri.parse(videoUrl(widget.url)));
+    }
+  }
+
+  // Video ko aage/piche karna ya roknaa/chalana (page ke video element par)
+  void _seek(int sec) => _c.runJavaScript(
+      "var v=document.querySelector('video'); if(v){v.currentTime=Math.max(0,v.currentTime+($sec));}");
+
+  void _toggle() => _c.runJavaScript(
+      "var v=document.querySelector('video'); if(v){ if(v.paused){v.play();}else{v.pause();} }");
+
+  @override
+  void dispose() {
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          Positioned.fill(child: WebViewWidget(controller: _c)),
+          Positioned(
+            top: 8,
+            left: 8,
+            child: SafeArea(
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(30),
+                  onTap: () => Navigator.pop(context),
+                  child: Ink(
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFE91E63), Color(0xFFFF9800)],
+                      ),
+                      borderRadius: BorderRadius.circular(30),
+                      boxShadow: const [
+                        BoxShadow(color: Colors.black54, blurRadius: 6),
+                      ],
+                    ),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.arrow_back, color: Colors.white),
+                          SizedBox(width: 6),
+                          Text('Back',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (_showSeek)
+            Positioned(
+              bottom: 12,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final b in [
+                      [Icons.replay_10, () => _seek(-10)],
+                      [Icons.play_arrow, _toggle],
+                      [Icons.forward_10, () => _seek(10)],
+                    ])
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        child: IconButton(
+                          style: IconButton.styleFrom(
+                              backgroundColor: Colors.black45),
+                          icon: Icon(b[0] as IconData, color: Colors.white70),
+                          onPressed: b[1] as VoidCallback,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
