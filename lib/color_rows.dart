@@ -17,6 +17,7 @@ const List<Color> _kRowBg = [
 /// dabane par halka sa dabne ka effect.
 ///  badge: 'symbol' = naam ka apna akshar (Medium ke liye, internet nahi chahiye)
 ///         'photo'  = photo; photo na ho (ya load ho rahi ho) to number ya icon
+///  bgColor / headColor / titleLow: admin ke "App Design" se aate hain (khali = purana look)
 class ColorRowsScreen extends StatefulWidget {
   final String title;
   final String? subtitle;
@@ -27,6 +28,9 @@ class ColorRowsScreen extends StatefulWidget {
   final IconData fallbackIcon;
   final bool showBanner;
   final DbRow? bannerMedium;
+  final Color? bgColor;
+  final Color? headColor;
+  final bool titleLow; // true: title header me nahi, list ke upar dikhe
 
   const ColorRowsScreen({
     super.key,
@@ -39,6 +43,9 @@ class ColorRowsScreen extends StatefulWidget {
     this.fallbackIcon = Icons.menu_book,
     this.showBanner = false,
     this.bannerMedium,
+    this.bgColor,
+    this.headColor,
+    this.titleLow = false,
   });
 
   @override
@@ -50,12 +57,30 @@ class _ColorRowsScreenState extends State<ColorRowsScreen> {
 
   void _retry() => setState(() => _future = widget.loader());
 
+  Color get _head => widget.headColor ?? kBrand;
+
+  Widget _heading() {
+    final dark = (widget.bgColor ?? kBg).computeLuminance() < 0.4;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(6, 4, 6, 10),
+      child: Text(
+        widget.title,
+        style: TextStyle(
+          fontSize: 22,
+          fontWeight: FontWeight.w700,
+          color: dark ? Colors.white : const Color(0xFF1F2937),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: widget.bgColor,
       appBar: AppBar(
-        title: Text(widget.title),
-        backgroundColor: kBrand,
+        title: widget.titleLow ? null : Text(widget.title),
+        backgroundColor: _head,
         foregroundColor: Colors.white,
         bottom: widget.subtitle == null
             ? null
@@ -89,10 +114,15 @@ class _ColorRowsScreenState extends State<ColorRowsScreen> {
                 if (items.isEmpty) {
                   return _Message(text: 'Abhi yahan kuch nahi hai.', onRetry: _retry);
                 }
+                final extra = widget.titleLow ? 1 : 0;
                 return ListView.builder(
                   padding: const EdgeInsets.fromLTRB(14, 10, 14, 24),
-                  itemCount: items.length,
-                  itemBuilder: (context, i) => _row(context, i, items[i]),
+                  itemCount: items.length + extra,
+                  itemBuilder: (context, i) {
+                    if (widget.titleLow && i == 0) return _heading();
+                    final k = i - extra;
+                    return _row(context, k, items[k]);
+                  },
                 );
               },
             ),
@@ -147,6 +177,7 @@ class _ColorRowsScreenState extends State<ColorRowsScreen> {
   }
 
   Widget _badge(int i, DbRow item, String name) {
+    final bc = _head;
     Widget circle(Widget child) => Container(
           width: 52,
           height: 52,
@@ -163,16 +194,16 @@ class _ColorRowsScreenState extends State<ColorRowsScreen> {
         sym = String.fromCharCode(name.trim().runes.first);
       }
       return circle(Text(sym,
-          style: const TextStyle(
-              fontSize: 24, fontWeight: FontWeight.w700, color: kBrand)));
+          style: TextStyle(
+              fontSize: 24, fontWeight: FontWeight.w700, color: bc)));
     }
 
     // Photo: na ho ya load ho rahi ho to number / icon dikhta hai (khali dabba nahi)
     final fallback = widget.numbered
         ? circle(Text('${i + 1}',
-            style: const TextStyle(
-                fontSize: 20, fontWeight: FontWeight.w700, color: kBrand)))
-        : circle(Icon(widget.fallbackIcon, color: kBrand, size: 26));
+            style: TextStyle(
+                fontSize: 20, fontWeight: FontWeight.w700, color: bc)))
+        : circle(Icon(widget.fallbackIcon, color: bc, size: 26));
     final img = imageUrl(item['image_url'] as String?);
     if (img.isEmpty) return fallback;
     return ClipOval(
