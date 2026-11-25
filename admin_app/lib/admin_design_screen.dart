@@ -219,4 +219,197 @@ class _DesignScreenState extends State<DesignScreen> {
                             radius: 24,
                             backgroundColor: Color(0xFFE9E1FB),
                             child: Text('🌇')),
-                        Sized
+                        SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Good Evening',
+                                  style: TextStyle(
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF1F2937))),
+                              Text('Kal ke test ki taiyari abhi se shuru karein',
+                                  style: TextStyle(
+                                      fontSize: 12, color: Color(0xFF6B7280))),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(colors: [br, br2]),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Shubho Durga Puja',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15)),
+                        Text('Assam Tuition Solution ki taraf se shubhkamna',
+                            style:
+                                TextStyle(color: Colors.white, fontSize: 12)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  if (_low) title(),
+                  for (final r in rows)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                          color: _cardColor(r[0] as Color),
+                          borderRadius: BorderRadius.circular(16)),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 24,
+                            backgroundColor: Colors.white,
+                            child: Text(r[1] as String,
+                                style: TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w700,
+                                    color: br)),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(r[2] as String,
+                                style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF1F2937))),
+                          ),
+                          const Icon(Icons.chevron_right,
+                              color: Color(0xFF1F2937)),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('App Design'),
+        actions: [
+          TextButton(
+            onPressed: _saving || _loading ? null : _save,
+            child: Text(_saving ? 'Ruko...' : 'Save'),
+          ),
+        ],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _err.isNotEmpty
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                            'Load nahi hua (app_design table banayi hai?):\n$_err',
+                            textAlign: TextAlign.center),
+                        const SizedBox(height: 12),
+                        FilledButton(
+                            onPressed: _load,
+                            child: const Text('Dobara try')),
+                      ],
+                    ),
+                  ),
+                )
+              : ListView(
+                  padding: const EdgeInsets.fromLTRB(14, 8, 14, 40),
+                  children: [
+                    _preview(),
+                    _label('1. Background ka rang'),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        for (final o in _bgOptions)
+                          _swatch(
+                            on: _bg.toUpperCase() == o[0],
+                            color: _hex(o[0]),
+                            tip: o[1],
+                            onTap: () => setState(() => _bg = o[0]),
+                          ),
+                      ],
+                    ),
+                    _label('2. Header / magenta rang'),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        for (final o in _brOptions)
+                          _swatch(
+                            on: _br.toUpperCase() == o[0],
+                            gradient: LinearGradient(
+                                colors: [_hex(o[0]), _hex(o[1])]),
+                            tip: o[2],
+                            onTap: () => setState(() {
+                              _br = o[0];
+                              _br2 = o[1];
+                            }),
+                          ),
+                      ],
+                    ),
+                    _label('3. Card ka rang'),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        for (final o in _cardOptions)
+                          _swatch(
+                            on: _card.toUpperCase() == o[0].toUpperCase(),
+                            color: o[0] == 'multi' ? null : _hex(o[0]),
+                            gradient: o[0] == 'multi'
+                                ? const LinearGradient(colors: [
+                                    Color(0xFFFFF7E0),
+                                    Color(0xFFE8F5E9),
+                                    Color(0xFFE3F2FD),
+                                    Color(0xFFFDECEA),
+                                  ])
+                                : null,
+                            tip: o[1],
+                            onTap: () => setState(() => _card = o[0]),
+                          ),
+                      ],
+                    ),
+                    _label('4. "Select Medium" kahan ho?'),
+                    SegmentedButton<bool>(
+                      segments: const [
+                        ButtonSegment(value: false, label: Text('Upar (header)')),
+                        ButtonSegment(
+                            value: true, label: Text('Niche (list ke upar)')),
+                      ],
+                      selected: {_low},
+                      onSelectionChanged: (v) => setState(() => _low = v.first),
+                    ),
+                    const SizedBox(height: 24),
+                    FilledButton.icon(
+                      onPressed: _saving ? null : _save,
+                      icon: const Icon(Icons.check),
+                      label: Text(_saving ? 'Ruko...' : 'Save'),
+                    ),
+                  ],
+                ),
+    );
+  }
+}
