@@ -293,4 +293,285 @@ class TableScreen extends StatefulWidget {
   final List<F> fields;
   final String titleKey;
   final String? subtitleKey;
-  final Widget Function(Db
+  final Widget Function(DbRow row)? child;
+  final bool isRoot;
+  final List<String> nullFilter; // in columns ka value khali (null) wale hi dikhao
+  final Widget Function(DbRow row)? extra; // doosra button (jaise sub-chapters)
+  final IconData extraIcon;
+  final String extraTooltip;
+  final bool bulk; // ek saath kai naam add karne ka button
+  // Upar chips: is table (jaise 'categories') ki rows chips banengi, aur list us chip ki rows tak simit rahegi
+  final String? chipsTable;
+  final String chipsKey; // is screen ki row ka column jo chip se jodta hai
+  final String chipsLabelKey; // chip par kya likha dikhe
+  final String? chipsFallbackKey; // chipsKey khali ho to is column se milao (jaise type)
+  final dynamic chipsClassId; // diya ho to chips sirf is class ki categories ke
+  final bool reorder; // list me drag karke order badalna
+  final bool modeSelect; // Add par Single / Double / Plain text card chunna
+
+  const TableScreen({
+    super.key,
+    required this.title,
+    required this.table,
+    required this.fields,
+    required this.titleKey,
+    this.filter = const {},
+    this.subtitleKey,
+    this.child,
+    this.isRoot = false,
+    this.nullFilter = const [],
+    this.extra,
+    this.extraIcon = Icons.more_horiz,
+    this.extraTooltip = '',
+    this.bulk = false,
+    this.chipsTable,
+    this.chipsKey = 'category_id',
+    this.chipsLabelKey = 'name',
+    this.chipsFallbackKey,
+    this.chipsClassId,
+    this.reorder = false,
+    this.modeSelect = false,
+  });
+
+  @override
+  State<TableScreen> createState() => _TableScreenState();
+}
+
+class _TableScreenState extends State<TableScreen> {
+  late Future<List<DbRow>> _future = _load();
+  List<DbRow> _chips = [];
+  String? _chipSel;
+
+  // Kis row ka kaun sa chip. Purani rows (category khali) type se jodi jati hain.
+  String? _chipOf(DbRow r) {
+    final v = r[widget.chipsKey];
+    if (v != null && _chips.any((c) => '${c['id']}' == '$v')) return '$v';
+    final fb = widget.chipsFallbackKey;
+    if (v == null && fb != null) {
+      final m = _chips.where((c) => c[fb] == r[fb]);
+      if (m.isNotEmpty) return '${m.first['id']}';
+    }
+    return null;
+  }
+
+  String _effectiveChip(bool hasNone) {
+    final ids = _chips.map((c) => '${c['id']}').toList();
+    final cur = _chipSel;
+    if (cur != null && (ids.contains(cur) || (cur == '_none' && hasNone))) {
+      return cur;
+    }
+    return ids.isNotEmpty ? ids.first : '_none';
+  }
+
+  Widget _leading(DbRow r, int i) {
+    final url = '${r['image_url'] ?? ''}'.trim();
+    final avatar = CircleAvatar(child: Text('${i + 1}'));
+    if (widget.chipsTable == null || !url.startsWith('http')) return avatar;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: Image.network(
+        url,
+        width: 64,
+        height: 48,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => avatar,
+      ),
+    );
+  }
+
+  Widget _chipBar(List<DbRow> all, String sel) {
+    final counts = <String, int>{};
+    for (final r in all) {
+      final k = _chipOf(r) ?? '_none';
+      counts[k] = (counts[k] ?? 0) + 1;
+    }
+    IconData iconOf(String? t) => t == 'video'
+        ? Icons.play_circle_outline
+        : t == 'pdf'
+            ? Icons.quiz_outlined
+            : Icons.menu_book_outlined;
+    final types = <String, String?>{
+      for (final c in _chips) '${c['id']}': c['type']?.toString()
+    };
+    final items = <MapEntry<String, String>>[
+      for (final c in _chips)
+        MapEntry('${c['id']}', '${c[widget.chipsLabelKey]}'),
+      if ((counts['_none'] ?? 0) > 0) const MapEntry('_none', 'Bina category'),
+    ];
+    return SizedBox(
+      height: 54,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        children: [
+          for (final it in items)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: ChoiceChip(
+                avatar: Icon(iconOf(types[it.key]), size: 18),
+                label: Text('${it.value} (${counts[it.key] ?? 0})'),
+                selected: it.key == sel,
+                onSelected: (_) => setState(() => _chipSel = it.key),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<List<DbRow>> _load() async {
+    if (widget.chipsTable != null) {
+      final c = await db
+          .from(widget.chipsTable!)
+          .select()
+          .order('sort_order', ascending: true);
+      var cats = List<DbRow>.from(c);
+      if (widget.chipsClassId != null) {
+        final cc = await db
+            .from('class_categories')
+            .select('category_id, sort_order')
+            .eq('class_id', widget.chipsClassId);
+        final order = <String, num>{
+          for (final r in cc) '${r['category_id']}': (r['sort_order'] ?? 0) as num
+        };
+        final mine = cats
+            .where((x) =>
+                order.containsKey('${x['id']}') && x['is_active'] != false)
+            .toList();
+        mine.sort((a, b) =>
+            order['${a['id']}']!.compareTo(order['${b['id']}']!));
+        // Is class ke liye kuch tick nahi hai to saari ON categories dikhao
+        cats = mine.isNotEmpty
+            ? mine
+            : cats.where((x) => x['is_active'] != false).toList();
+      }
+      _chips = cats;
+    }
+    var q = db.from(widget.table).select();
+    widget.filter.forEach((k, v) {
+      q = q.eq(k, v);
+    });
+    for (final k in widget.nullFilter) {
+      q = q.isFilter(k, null);
+    }
+    final data = await q.order('sort_order', ascending: true).order('id', ascending: true);
+    return List<DbRow>.from(data);
+  }
+
+  void _refresh() => setState(() => _future = _load());
+
+  // Title khali ho to body / link ka shuru dikhao, taaki list me pehchan sakein
+  String _rowLabel(DbRow r) {
+    final t = '${r[widget.titleKey] ?? ''}'.trim();
+    if (t.isNotEmpty || !widget.modeSelect) return t;
+    for (final k in ['body', 'url', 'image_url']) {
+      final v = '${r[k] ?? ''}'.trim();
+      if (v.isNotEmpty) return v;
+    }
+    return '(bina title)';
+  }
+
+  Future<void> _reorder(List<DbRow> all, List<DbRow> rows, int o, int n) async {
+    if (n > o) n -= 1;
+    if (o == n) return;
+    final item = rows.removeAt(o);
+    rows.insert(n, item);
+    final changed = <DbRow>[];
+    for (var i = 0; i < rows.length; i++) {
+      if ('${rows[i]['sort_order']}' != '${i + 1}') {
+        rows[i]['sort_order'] = i + 1;
+        changed.add(rows[i]);
+      }
+    }
+    all.sort((a, b) {
+      final c = (num.tryParse('${a['sort_order']}') ?? 0)
+          .compareTo(num.tryParse('${b['sort_order']}') ?? 0);
+      if (c != 0) return c;
+      return (num.tryParse('${a['id']}') ?? 0)
+          .compareTo(num.tryParse('${b['id']}') ?? 0);
+    });
+    setState(() {});
+    try {
+      await Future.wait([
+        for (final r in changed)
+          (() async {
+            await db
+                .from(widget.table)
+                .update({'sort_order': r['sort_order']}).eq('id', r['id']);
+          })()
+      ]);
+    } catch (e) {
+      _msg('Order save nahi hua: $e');
+      _refresh();
+    }
+  }
+
+  void _msg(String text) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+  }
+
+  Future<void> _edit([DbRow? row]) async {
+    final ctrls = {
+      for (final f in widget.fields)
+        f.key: TextEditingController(
+            text: row?[f.key] == null ? '' : '${row![f.key]}')
+    };
+    // Database se aane wale dropdown (jaise categories) pehle load karein
+    final choices = <String, List<DbRow>>{};
+    try {
+      for (final f in widget.fields) {
+        if (f.fromTable != null) {
+          final data = await db
+              .from(f.fromTable!)
+              .select()
+              .order('sort_order', ascending: true);
+          choices[f.key] = List<DbRow>.from(data);
+        }
+      }
+    } catch (e) {
+      _msg('Dropdown load nahi hua: $e');
+      return;
+    }
+    // Naye row me dropdown sirf is class ki categories dikhaye
+    if (row == null &&
+        widget.chipsClassId != null &&
+        _chips.isNotEmpty &&
+        choices.containsKey(widget.chipsKey)) {
+      choices[widget.chipsKey] = List<DbRow>.from(_chips);
+    }
+    // Naye row me order apne aap agla number
+    if (row == null) {
+      final list = await _future;
+      for (final f in widget.fields) {
+        if (f.number && ctrls[f.key]!.text.isEmpty) {
+          ctrls[f.key]!.text = '${list.length + 1}';
+        }
+        if (f.options != null && ctrls[f.key]!.text.isEmpty) {
+          ctrls[f.key]!.text = f.options!.first;
+        }
+        if (f.fromTable != null &&
+            ctrls[f.key]!.text.isEmpty &&
+            (choices[f.key] ?? []).isNotEmpty) {
+          ctrls[f.key]!.text = '${choices[f.key]!.first['id']}';
+        }
+        if (widget.chipsTable != null && f.key == widget.chipsKey) {
+          final cur = _chipSel;
+          if (cur != null &&
+              cur != '_none' &&
+              _chips.any((c) => '${c['id']}' == cur)) {
+            ctrls[f.key]!.text = cur;
+          }
+        }
+      }
+    }
+    if (!mounted) return;
+
+    // Card ka prakar: single / double / text, aur uska mode
+    String? kind;
+    String? mode;
+    if (widget.modeSelect) {
+      if (row == null) {
+        kind = await Navigator.push<String>(
+          context,
+          Material
