@@ -188,29 +188,38 @@ Widget chaptersScreen(DbRow s, [DbRow? parent]) => TableScreen(
       ],
       titleKey: 'name',
       subtitleKey: 'subtitle',
-      child: (ch) => contentsScreen(ch),
+      child: (ch) => contentsScreen(ch, s['class_id']),
       bulk: true,
       extraIcon: Icons.account_tree,
       extraTooltip: 'Sub-chapters (chhote chapter)',
       extra: (ch) => chaptersScreen(s, ch),
     );
 
-Widget contentsScreen(DbRow ch) => TableScreen(
+Widget contentsScreen(DbRow ch, [dynamic classId]) => TableScreen(
       title: '${ch['name']} - Content',
       table: 'contents',
       filter: {'chapter_id': ch['id']},
       fields: const [
-        F('category_id', 'Category (database se)', fromTable: 'categories', copy: {'type': 'type'}),
-        F('title', 'Title (Book me neeche ka naam, jaise A for Apple)'),
-        F('url', 'Link (video ya MCQ pdf)'),
-        F('image_url', 'Photo 1 (video ka thumbnail / Book me BAAYEIN card)'),
-        F('image_url2', 'Photo 2 (sirf Book me DAAYEIN card)'),
-        F('body', 'Chhota text (Book me, optional)', multiline: true),
-        F('sort_order', 'Order (1,2,3...)', number: true),
+        F('category_id', 'Category', fromTable: 'categories'),
+        F('title', 'Title'),
+        F('url', 'Video ka link', types: {'single_video'}),
+        F('url', '.txt file ka link', types: {'text_file'}),
+        F('image_url', 'Video thumbnail ka link', types: {'single_video'}),
+        F('image_url', 'Photo ka link', types: {'single_photo'}),
+        F('image_url', 'Photo 1 ka link (baayein card)', types: {'double'}),
+        F('image_url2', 'Photo 2 ka link (daayein card)', types: {'double'}),
+        F('body', 'Neeche ka text (optional, dabakar likhein)',
+            multiline: true,
+            types: {'single_photo', 'single_video', 'double'}),
+        F('body', 'Text (dabakar poora likhein)',
+            multiline: true, types: {'text_keyboard'}),
       ],
+      modeSelect: true, // Add par Single / Double / Plain text chunna
+      reorder: true, // order list me pakad kar upar-neeche karke badlein
       titleKey: 'title',
       subtitleKey: 'type',
       chipsTable: 'categories', // upar category chips, dabane par sirf usi ka content
+      chipsClassId: classId, // sirf is class ki categories ke chips (class_categories se)
       chipsFallbackKey: 'type', // purani rows (category khali) type se jud jati hain
     );
 
@@ -228,13 +237,53 @@ class F {
   final String? fromTable;
   final String labelKey; // dropdown me kaun sa column dikhe
   final Map<String, String> copy; // chuni row ka column -> is row ke column me copy
+  final Set<String>? types; // diya ho to ye field sirf in category-types me dikhe
   const F(this.key, this.label,
       {this.multiline = false,
       this.number = false,
       this.options,
       this.fromTable,
       this.labelKey = 'name',
-      this.copy = const {}});
+      this.copy = const {},
+      this.types});
+}
+
+class _KindChooser extends StatelessWidget {
+  const _KindChooser();
+
+  Widget _card(BuildContext c, String kind, IconData icon, String title,
+      String sub) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 14),
+      child: ListTile(
+        contentPadding: const EdgeInsets.all(16),
+        leading: Icon(icon, size: 40, color: Colors.indigo),
+        title: Text(title,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+        subtitle: Text(sub),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => Navigator.pop(c, kind),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Kaisa card banana hai?')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          _card(context, 'single', Icons.crop_square, 'Single card',
+              'Ek bada card: photo ka link ya video ka link'),
+          _card(context, 'double', Icons.view_column_outlined, 'Double card',
+              'Do card ek saath: photo 1 aur photo 2 ka link'),
+          _card(context, 'text', Icons.notes, 'Plain text',
+              '.txt file ka link ya keyboard se likhna'),
+        ],
+      ),
+    );
+  }
 }
 
 class TableScreen extends StatefulWidget {
@@ -244,475 +293,4 @@ class TableScreen extends StatefulWidget {
   final List<F> fields;
   final String titleKey;
   final String? subtitleKey;
-  final Widget Function(DbRow row)? child;
-  final bool isRoot;
-  final List<String> nullFilter; // in columns ka value khali (null) wale hi dikhao
-  final Widget Function(DbRow row)? extra; // doosra button (jaise sub-chapters)
-  final IconData extraIcon;
-  final String extraTooltip;
-  final bool bulk; // ek saath kai naam add karne ka button
-  // Upar chips: is table (jaise 'categories') ki rows chips banengi, aur list us chip ki rows tak simit rahegi
-  final String? chipsTable;
-  final String chipsKey; // is screen ki row ka column jo chip se jodta hai
-  final String chipsLabelKey; // chip par kya likha dikhe
-  final String? chipsFallbackKey; // chipsKey khali ho to is column se milao (jaise type)
-
-  const TableScreen({
-    super.key,
-    required this.title,
-    required this.table,
-    required this.fields,
-    required this.titleKey,
-    this.filter = const {},
-    this.subtitleKey,
-    this.child,
-    this.isRoot = false,
-    this.nullFilter = const [],
-    this.extra,
-    this.extraIcon = Icons.more_horiz,
-    this.extraTooltip = '',
-    this.bulk = false,
-    this.chipsTable,
-    this.chipsKey = 'category_id',
-    this.chipsLabelKey = 'name',
-    this.chipsFallbackKey,
-  });
-
-  @override
-  State<TableScreen> createState() => _TableScreenState();
-}
-
-class _TableScreenState extends State<TableScreen> {
-  late Future<List<DbRow>> _future = _load();
-  List<DbRow> _chips = [];
-  String? _chipSel;
-
-  // Kis row ka kaun sa chip. Purani rows (category khali) type se jodi jati hain.
-  String? _chipOf(DbRow r) {
-    final v = r[widget.chipsKey];
-    if (v != null && _chips.any((c) => '${c['id']}' == '$v')) return '$v';
-    final fb = widget.chipsFallbackKey;
-    if (v == null && fb != null) {
-      final m = _chips.where((c) => c[fb] == r[fb]);
-      if (m.isNotEmpty) return '${m.first['id']}';
-    }
-    return null;
-  }
-
-  String _effectiveChip(bool hasNone) {
-    final ids = _chips.map((c) => '${c['id']}').toList();
-    final cur = _chipSel;
-    if (cur != null && (ids.contains(cur) || (cur == '_none' && hasNone))) {
-      return cur;
-    }
-    return ids.isNotEmpty ? ids.first : '_none';
-  }
-
-  Widget _chipBar(List<DbRow> all, String sel) {
-    final counts = <String, int>{};
-    for (final r in all) {
-      final k = _chipOf(r) ?? '_none';
-      counts[k] = (counts[k] ?? 0) + 1;
-    }
-    final items = <MapEntry<String, String>>[
-      for (final c in _chips)
-        MapEntry('${c['id']}', '${c[widget.chipsLabelKey]}'),
-      if ((counts['_none'] ?? 0) > 0) const MapEntry('_none', 'Bina category'),
-    ];
-    return SizedBox(
-      height: 54,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        children: [
-          for (final it in items)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: ChoiceChip(
-                label: Text('${it.value} (${counts[it.key] ?? 0})'),
-                selected: it.key == sel,
-                onSelected: (_) => setState(() => _chipSel = it.key),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Future<List<DbRow>> _load() async {
-    if (widget.chipsTable != null) {
-      final c = await db
-          .from(widget.chipsTable!)
-          .select()
-          .order('sort_order', ascending: true);
-      _chips = List<DbRow>.from(c);
-    }
-    var q = db.from(widget.table).select();
-    widget.filter.forEach((k, v) {
-      q = q.eq(k, v);
-    });
-    for (final k in widget.nullFilter) {
-      q = q.isFilter(k, null);
-    }
-    final data = await q.order('sort_order', ascending: true).order('id', ascending: true);
-    return List<DbRow>.from(data);
-  }
-
-  void _refresh() => setState(() => _future = _load());
-
-  void _msg(String text) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
-  }
-
-  Future<void> _edit([DbRow? row]) async {
-    final ctrls = {
-      for (final f in widget.fields)
-        f.key: TextEditingController(
-            text: row?[f.key] == null ? '' : '${row![f.key]}')
-    };
-    // Database se aane wale dropdown (jaise categories) pehle load karein
-    final choices = <String, List<DbRow>>{};
-    try {
-      for (final f in widget.fields) {
-        if (f.fromTable != null) {
-          final data = await db
-              .from(f.fromTable!)
-              .select()
-              .order('sort_order', ascending: true);
-          choices[f.key] = List<DbRow>.from(data);
-        }
-      }
-    } catch (e) {
-      _msg('Dropdown load nahi hua: $e');
-      return;
-    }
-    // Naye row me order apne aap agla number
-    if (row == null) {
-      final list = await _future;
-      for (final f in widget.fields) {
-        if (f.number && ctrls[f.key]!.text.isEmpty) {
-          ctrls[f.key]!.text = '${list.length + 1}';
-        }
-        if (f.options != null && ctrls[f.key]!.text.isEmpty) {
-          ctrls[f.key]!.text = f.options!.first;
-        }
-        if (f.fromTable != null &&
-            ctrls[f.key]!.text.isEmpty &&
-            (choices[f.key] ?? []).isNotEmpty) {
-          ctrls[f.key]!.text = '${choices[f.key]!.first['id']}';
-        }
-        if (widget.chipsTable != null && f.key == widget.chipsKey) {
-          final cur = _chipSel;
-          if (cur != null &&
-              cur != '_none' &&
-              _chips.any((c) => '${c['id']}' == cur)) {
-            ctrls[f.key]!.text = cur;
-          }
-        }
-      }
-    }
-    if (!mounted) return;
-
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(row == null ? 'Naya add karein' : 'Badlein'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (final f in widget.fields)
-                Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: f.fromTable != null
-                      ? DropdownButtonFormField<String>(
-                          isExpanded: true,
-                          value: (choices[f.key] ?? <DbRow>[])
-                                  .any((r) => '${r['id']}' == ctrls[f.key]!.text)
-                              ? ctrls[f.key]!.text
-                              : null,
-                          decoration: InputDecoration(
-                              labelText: f.label,
-                              border: const OutlineInputBorder()),
-                          items: [
-                            for (final r in choices[f.key] ?? <DbRow>[])
-                              DropdownMenuItem(
-                                  value: '${r['id']}',
-                                  child: Text('${r[f.labelKey]}'))
-                          ],
-                          onChanged: (v) => ctrls[f.key]!.text = v ?? '',
-                        )
-                      : f.options != null
-                      ? DropdownButtonFormField<String>(
-                          value: ctrls[f.key]!.text,
-                          decoration: InputDecoration(
-                              labelText: f.label,
-                              border: const OutlineInputBorder()),
-                          items: [
-                            for (final o in f.options!)
-                              DropdownMenuItem(value: o, child: Text(o))
-                          ],
-                          onChanged: (v) => ctrls[f.key]!.text = v ?? '',
-                        )
-                      : TextField(
-                          controller: ctrls[f.key],
-                          keyboardType:
-                              f.number ? TextInputType.number : TextInputType.text,
-                          minLines: f.multiline ? 3 : 1,
-                          maxLines: f.multiline ? 6 : 2,
-                          decoration: InputDecoration(
-                              labelText: f.label,
-                              border: const OutlineInputBorder()),
-                        ),
-                ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
-        ],
-      ),
-    );
-    if (ok != true) return;
-
-    final vals = <String, dynamic>{};
-    for (final f in widget.fields) {
-      final t = ctrls[f.key]!.text.trim();
-      if (f.number) {
-        vals[f.key] = int.tryParse(t) ?? 0;
-      } else if (f.fromTable != null) {
-        vals[f.key] = t.isEmpty ? null : (int.tryParse(t) ?? t);
-        final sel = (choices[f.key] ?? <DbRow>[]).where((r) => '${r['id']}' == t);
-        if (sel.isNotEmpty) {
-          f.copy.forEach((from, to) => vals[to] = sel.first[from]);
-        }
-      } else {
-        vals[f.key] = t.isEmpty ? null : t;
-      }
-    }
-    if (vals[widget.titleKey] == null) {
-      _msg('Naam / title khali nahi ho sakta');
-      return;
-    }
-
-    try {
-      if (row == null) {
-        await db.from(widget.table).insert({...widget.filter, ...vals});
-      } else {
-        await db.from(widget.table).update(vals).eq('id', row['id']);
-      }
-      _msg('Save ho gaya');
-      _refresh();
-    } catch (e) {
-      _msg('Save nahi hua: $e');
-    }
-  }
-
-  Future<void> _bulkAdd() async {
-    final ctrl = TextEditingController();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Ek saath kai add karein'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Har naam alag line me likhein ya paste karein. Order apne aap 1,2,3... lagega.'),
-              const SizedBox(height: 12),
-              TextField(
-                controller: ctrl,
-                minLines: 6,
-                maxLines: 12,
-                decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    hintText: 'Pehla naam\nDusra naam\nTeesra naam'),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Add')),
-        ],
-      ),
-    );
-    if (ok != true || !mounted) return;
-    final names = ctrl.text
-        .split('\n')
-        .map((e) => e.trim())
-        .where((e) => e.isNotEmpty)
-        .toList();
-    if (names.isEmpty) return;
-    try {
-      final list = await _future;
-      var n = list.length;
-      final rows = <Map<String, dynamic>>[
-        for (final name in names)
-          {...widget.filter, widget.titleKey: name, 'sort_order': ++n}
-      ];
-      await db.from(widget.table).insert(rows);
-      _msg('${names.length} add ho gaye');
-      _refresh();
-    } catch (e) {
-      _msg('Save nahi hua: $e');
-    }
-  }
-
-  Future<void> _delete(DbRow row) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete karein?'),
-        content: Text(
-            '"${row[widget.titleKey]}" hat jayega. Iske andar ka sab data bhi hat jayega.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Nahi')),
-          FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: Colors.red),
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Haan, delete')),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    try {
-      await db.from(widget.table).delete().eq('id', row['id']);
-      _refresh();
-    } catch (e) {
-      _msg('Delete nahi hua: $e');
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.title),
-        actions: [
-          if (widget.bulk)
-            IconButton(
-              tooltip: 'Ek saath kai add karein',
-              icon: const Icon(Icons.playlist_add),
-              onPressed: _bulkAdd,
-            ),
-          if (widget.isRoot)
-            PopupMenuButton<String>(
-              tooltip: 'Categories / Notice',
-              icon: const Icon(Icons.tune),
-              onSelected: (v) {
-                final Widget page = v == 'cat'
-                    ? const CategoryManagerScreen()
-                    : v == 'cls'
-                        ? const ClassCategorySetupScreen()
-                        : const NoticeManagerScreen();
-                Navigator.push(
-                    context, MaterialPageRoute(builder: (_) => page));
-              },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'cat', child: Text('Categories')),
-                PopupMenuItem(
-                    value: 'cls', child: Text('Class ke hisab se categories')),
-                PopupMenuItem(value: 'notice', child: Text('Notice / Banner')),
-              ],
-            ),
-          if (widget.isRoot)
-            IconButton(
-              tooltip: 'Logout',
-              icon: const Icon(Icons.logout),
-              onPressed: () => db.auth.signOut(),
-            ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _edit(),
-        icon: const Icon(Icons.add),
-        label: const Text('Add'),
-      ),
-      body: FutureBuilder<List<DbRow>>(
-        future: _future,
-        builder: (context, snap) {
-          if (snap.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snap.hasError) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('Data nahi aaya:\n${snap.error}', textAlign: TextAlign.center),
-                    const SizedBox(height: 12),
-                    FilledButton(onPressed: _refresh, child: const Text('Dobara try karein')),
-                  ],
-                ),
-              ),
-            );
-          }
-          final all = snap.data ?? [];
-          if (all.isEmpty && widget.chipsTable == null) {
-            return const Center(child: Text('Abhi kuch nahi hai. Neeche Add dabayein.'));
-          }
-          final hasNone = all.any((r) => _chipOf(r) == null);
-          final sel = _effectiveChip(hasNone);
-          final rows = widget.chipsTable == null
-              ? all
-              : all.where((r) => (_chipOf(r) ?? '_none') == sel).toList();
-          final Widget list = rows.isEmpty
-              ? const Center(
-                  child: Text('Is category me abhi kuch nahi hai. Neeche Add dabayein.'))
-              : ListView.builder(
-            padding: const EdgeInsets.only(bottom: 90),
-            itemCount: rows.length,
-            itemBuilder: (context, i) {
-              final r = rows[i];
-              final sub = widget.subtitleKey == null
-                  ? ''
-                  : '${r[widget.subtitleKey] ?? ''}';
-              return ListTile(
-                leading: CircleAvatar(child: Text('${i + 1}')),
-                title: Text('${r[widget.titleKey] ?? ''}',
-                    maxLines: 2, overflow: TextOverflow.ellipsis),
-                subtitle: sub.isEmpty ? null : Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis),
-                onTap: widget.child == null
-                    ? () => _edit(r)
-                    : () => Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => widget.child!(r)),
-                        ),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (widget.extra != null)
-                      IconButton(
-                        tooltip: widget.extraTooltip,
-                        icon: Icon(widget.extraIcon, color: Colors.indigo),
-                        onPressed: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => widget.extra!(r)),
-                        ),
-                      ),
-                    IconButton(icon: const Icon(Icons.edit), onPressed: () => _edit(r)),
-                    IconButton(
-                        icon: const Icon(Icons.delete, color: Colors.red),
-                        onPressed: () => _delete(r)),
-                  ],
-                ),
-              );
-            },
-          );
-          if (widget.chipsTable == null) return list;
-          return Column(
-            children: [
-              _chipBar(all, sel),
-              Expanded(child: list),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
+  final Widget Function(Db
