@@ -28,6 +28,7 @@ class _SplashScreenState extends State<SplashScreen> {
     try {
       final c = VideoPlayerController.asset('assets/videos/splash.mp4');
       await c.initialize();
+      await c.setVolume(0.0); // splash video ki awaaz band
       if (!mounted) {
         c.dispose();
         return;
