@@ -13,6 +13,7 @@ import 'splash_screen.dart';
 part 'chip_content_screen.dart';
 part 'notice_banner.dart';
 part 'color_rows.dart';
+part 'app_design.dart';
 // App ke rang: gulabi sirf header, button aur active cheezon me
 const Color kBrand = Color(0xFFAD1457);
 const Color kBg = Color(0xFFF8F9FA);
