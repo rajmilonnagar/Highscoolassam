@@ -300,7 +300,7 @@ class _ItemGridScreenState extends State<ItemGridScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title),
-        backgroundColor: kBrand,
+        backgroundColor: AppDesign.brand,
         foregroundColor: Colors.white,
         bottom: widget.subtitle == null
             ? null
@@ -487,7 +487,7 @@ class _Message extends StatelessWidget {
           const SizedBox(height: 12),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-                backgroundColor: kBrand, foregroundColor: Colors.white),
+                backgroundColor: AppDesign.brand, foregroundColor: Colors.white),
             onPressed: onRetry,
             child: const Text('Dobara try karein'),
           ),
@@ -700,7 +700,7 @@ class _SubjectGridScreenState extends State<SubjectGridScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title),
-        backgroundColor: kBrand,
+        backgroundColor: AppDesign.brand,
         foregroundColor: Colors.white,
       ),
       body: FutureBuilder<List<DbRow>>(
@@ -804,7 +804,7 @@ class _ContentScreenState extends State<ContentScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: Text('${widget.chapter['name']}'),
-          backgroundColor: kBrand,
+          backgroundColor: AppDesign.brand,
           foregroundColor: Colors.white,
           bottom: const TabBar(
             indicatorColor: Colors.white,
