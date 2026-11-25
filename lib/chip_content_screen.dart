@@ -91,7 +91,7 @@ class _ChipContentScreenState extends State<ChipContentScreen> {
   // ------------------------------------------------------------------
   // Square chip: upar icon / photo, neeche naam
   // ------------------------------------------------------------------
-  Widget _chip(DbRow c, bool on) {
+  Widget _chip(DbRow c, bool on, int i) {
     final img = imageUrl(c['image_url'] as String?);
     final fallback = Icon(_catIcon(c['type']),
         size: 28, color: on ? AppDesign.brand : kGrey);
@@ -99,7 +99,7 @@ class _ChipContentScreenState extends State<ChipContentScreen> {
       width: 46,
       height: 46,
       decoration: BoxDecoration(
-        color: on ? Colors.white : kThumbBg,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(13),
       ),
       child: ClipRRect(
@@ -123,10 +123,10 @@ class _ChipContentScreenState extends State<ChipContentScreen> {
         margin: const EdgeInsets.only(right: 10),
         padding: const EdgeInsets.fromLTRB(6, 8, 6, 6),
         decoration: BoxDecoration(
-          color: on ? AppDesign.brand : Colors.white,
+          color: on ? AppDesign.brand : AppDesign.rowColor(i),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-              color: on ? AppDesign.brand : const Color(0xFFD1D5DB),
+              color: on ? AppDesign.brand : Colors.black12,
               width: 1.2),
           boxShadow: on
               ? [
@@ -161,16 +161,19 @@ class _ChipContentScreenState extends State<ChipContentScreen> {
 
   Widget _chipBar(List<DbRow> chips, String sel) {
     return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
+      decoration: BoxDecoration(
+        color: AppDesign.bg,
+        border: const Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
       ),
       child: SizedBox(
         height: 114,
         child: ListView(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.fromLTRB(14, 10, 4, 10),
-          children: [for (final c in chips) _chip(c, '${c['id']}' == sel)],
+          children: [
+            for (var i = 0; i < chips.length; i++)
+              _chip(chips[i], '${chips[i]['id']}' == sel, i)
+          ],
         ),
       ),
     );
