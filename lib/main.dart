@@ -41,7 +41,7 @@ void main() async {
   // Supabase initialize karein (apni credentials yahan dalein)
   await Supabase.initialize(
     url: 'https://ymiakzzapyhybtoumtbx.supabase.co',
-    anonKey: 'PASTE_SUPABASE_ANON_KEY_HERE',
+    anonKey: 'sb_publishable_9AC4HbjXewYpiJGOGMPz_A_HKdVimOl',
   );
   await AppDesign.load();
   runApp(const MyApp());
