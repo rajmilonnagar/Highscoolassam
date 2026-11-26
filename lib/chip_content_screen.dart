@@ -2,14 +2,14 @@
 //   part 'chip_content_screen.dart';
 part of 'main.dart';
 
-class _ChipData {
-  final List<DbRow> chips;
-  final List<DbRow> rows;
-  const _ChipData(this.chips, this.rows);
-}
+const Color _kLine = Color(0xFFE5E7EB);
 
-/// Chapter ke andar ka content: upar square chips (icon upar, naam neeche),
-/// chip dabane par sirf usi category ka content.
+/// Chapter ke andar ka content:
+///  - Upar chhota AppBar (44) + bade square chips. Neeche scroll karte hi dono
+///    chhup jate hain, upar scroll karte hi wapas aa jate hain.
+///  - Chip dabane par sirf usi tab ka data Supabase se aata hai.
+///  - Cards poori chaudai ke, bahar koi gap nahi, beech me 1px ki line.
+///  - Poore page ka sirf ek scroll (andar koi alag scroll nahi).
 class ChipContentScreen extends StatefulWidget {
   final DbRow chapter;
   final DbRow subject;
@@ -24,10 +24,43 @@ class ChipContentScreen extends StatefulWidget {
 }
 
 class _ChipContentScreenState extends State<ChipContentScreen> {
-  late Future<_ChipData> _future = _load();
+  final ScrollController _scroll = ScrollController();
+
+  // Chips
+  List<DbRow> _chips = [];
+  bool _chipsLoading = true;
+  bool _chipsError = false;
   String? _sel;
 
-  Future<_ChipData> _load() async {
+  // Chune hue tab ka content
+  List<DbRow> _rows = [];
+  bool _rowsLoading = false;
+  bool _rowsError = false;
+  int _req = 0; // purani request ka jawab ignore karne ke liye
+
+  @override
+  void initState() {
+    super.initState();
+    _loadChips();
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  DbRow? get _selChip {
+    for (final c in _chips) {
+      if ('${c['id']}' == _sel) return c;
+    }
+    return null;
+  }
+
+  // ------------------------------------------------------------------
+  // Supabase: chips
+  // ------------------------------------------------------------------
+  Future<List<DbRow>> _fetchChips() async {
     var cats = List<DbRow>.from(await _db
         .from('categories')
         .select()
@@ -48,37 +81,127 @@ class _ChipContentScreenState extends State<ChipContentScreen> {
         };
         final mine =
             cats.where((c) => order.containsKey('${c['id']}')).toList();
-        mine.sort((a, b) => order['${a['id']}']!.compareTo(order['${b['id']}']!));
+        mine.sort(
+            (a, b) => order['${a['id']}']!.compareTo(order['${b['id']}']!));
         if (mine.isNotEmpty) cats = mine;
       } catch (_) {}
     }
+    return cats;
+  }
 
-    final data = await _db
-        .from('contents')
-        .select()
-        .eq('chapter_id', widget.chapter['id'])
+  Future<void> _loadChips({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _chipsLoading = true;
+        _chipsError = false;
+      });
+    }
+    try {
+      final chips = await _fetchChips();
+      if (!mounted) return;
+      final ids = chips.map((c) => '${c['id']}').toList();
+      setState(() {
+        _chips = chips;
+        _sel = (_sel != null && ids.contains(_sel))
+            ? _sel
+            : (ids.isNotEmpty ? ids.first : null);
+        _chipsLoading = false;
+        _chipsError = false;
+      });
+      await _loadRows(silent: silent);
+    } catch (e) {
+      debugPrint('Chips load error: $e');
+      if (!mounted) return;
+      if (silent && _chips.isNotEmpty) {
+        _snack('Refresh nahi ho paya. Internet check karein.');
+      } else {
+        setState(() {
+          _chipsLoading = false;
+          _chipsError = true;
+        });
+      }
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Supabase: chune hue chip ka content
+  // ------------------------------------------------------------------
+  Future<List<DbRow>> _fetchRows() async {
+    var q = _db.from('contents').select().eq('chapter_id', widget.chapter['id']);
+
+    final chip = _selChip;
+    if (chip != null) {
+      final id = chip['id'];
+      final type = chip['type'];
+      // Purani rows (category khali) type se pehle usi type wale chip ko milti hain
+      var ownsLegacy = false;
+      if (type != null && '$type'.isNotEmpty) {
+        for (final c in _chips) {
+          if (c['type'] == type) {
+            ownsLegacy = '${c['id']}' == '$id';
+            break;
+          }
+        }
+      }
+      if (ownsLegacy) {
+        q = q.or('category_id.eq.$id,and(category_id.is.null,type.eq.$type)');
+      } else {
+        q = q.eq('category_id', id);
+      }
+    }
+
+    final data = await q
         .order('sort_order', ascending: true)
         .order('id', ascending: true);
-    return _ChipData(cats, List<DbRow>.from(data));
+    return List<DbRow>.from(data);
   }
 
-  Future<void> _reload() async {
-    final f = _load();
-    setState(() => _future = f);
-    try {
-      await f;
-    } catch (_) {}
-  }
-
-  // Row kis chip ki hai. Purani rows (category khali) type se jodi jati hain.
-  String? _chipOf(DbRow r, List<DbRow> chips) {
-    final v = r['category_id'];
-    if (v != null && chips.any((c) => '${c['id']}' == '$v')) return '$v';
-    if (v == null) {
-      final m = chips.where((c) => c['type'] == r['type']);
-      if (m.isNotEmpty) return '${m.first['id']}';
+  Future<void> _loadRows({bool silent = false}) async {
+    final my = ++_req;
+    if (!silent) {
+      setState(() {
+        _rowsLoading = true;
+        _rowsError = false;
+      });
     }
-    return null;
+    try {
+      final data = await _fetchRows();
+      if (!mounted || my != _req) return;
+      setState(() {
+        _rows = data;
+        _rowsLoading = false;
+        _rowsError = false;
+      });
+    } catch (e) {
+      debugPrint('Rows load error: $e');
+      if (!mounted || my != _req) return;
+      if (silent && _rows.isNotEmpty) {
+        _snack('Refresh nahi ho paya. Internet check karein.');
+      } else {
+        setState(() {
+          _rowsLoading = false;
+          _rowsError = true;
+        });
+      }
+    }
+  }
+
+  Future<void> _refresh() => _loadChips(silent: true);
+
+  void _snack(String t) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(t)));
+  }
+
+  void _select(String id) {
+    if (id == _sel) return;
+    setState(() {
+      _sel = id;
+      _rows = [];
+    });
+    if (_scroll.hasClients) _scroll.jumpTo(0);
+    _loadRows();
   }
 
   IconData _catIcon(dynamic t) {
@@ -89,7 +212,7 @@ class _ChipContentScreenState extends State<ChipContentScreen> {
   }
 
   // ------------------------------------------------------------------
-  // Square chip: upar icon / photo, neeche naam
+  // Square chip: upar icon / photo, neeche naam (pehle jaise bade)
   // ------------------------------------------------------------------
   Widget _chip(DbRow c, bool on, int i) {
     final img = imageUrl(c['image_url'] as String?);
@@ -117,7 +240,7 @@ class _ChipContentScreenState extends State<ChipContentScreen> {
       ),
     );
     return GestureDetector(
-      onTap: () => setState(() => _sel = '${c['id']}'),
+      onTap: () => _select('${c['id']}'),
       child: Padding(
         padding: const EdgeInsets.only(right: 10),
         child: Column(
@@ -178,20 +301,22 @@ class _ChipContentScreenState extends State<ChipContentScreen> {
     );
   }
 
-  Widget _chipBar(List<DbRow> chips, String sel) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppDesign.bg,
-        border: const Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
-      ),
-      child: SizedBox(
-        height: 134,
+  static const double _chipBarH = 135; // 134 + neeche ki 1px line
+
+  Widget _chipBar() {
+    return SizedBox(
+      height: _chipBarH,
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppDesign.bg,
+          border: const Border(bottom: BorderSide(color: _kLine)),
+        ),
         child: ListView(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.fromLTRB(14, 10, 4, 10),
           children: [
-            for (var i = 0; i < chips.length; i++)
-              _chip(chips[i], '${chips[i]['id']}' == sel, i)
+            for (var i = 0; i < _chips.length; i++)
+              _chip(_chips[i], '${_chips[i]['id']}' == _sel, i)
           ],
         ),
       ),
@@ -199,223 +324,86 @@ class _ChipContentScreenState extends State<ChipContentScreen> {
   }
 
   // ------------------------------------------------------------------
-  // Content cards
+  // Content: text, image (caption ke saath), link (web) - sab poori chaudai
   // ------------------------------------------------------------------
-  Widget _pic(String raw, {double ratio = 1}) {
-    final img = imageUrl(raw);
-    return appCard(
-      child: AspectRatio(
-        aspectRatio: ratio,
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: img.isEmpty
-              ? const Center(
-                  child: Icon(Icons.image_outlined, size: 48, color: kThumbBg))
-              : CachedNetworkImage(
-                  imageUrl: img,
-                  fit: BoxFit.contain,
-                  placeholder: (_, __) => Center(
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: AppDesign.brand)),
-                  errorWidget: (_, __, ___) => const Center(
-                      child: Icon(Icons.broken_image_outlined,
-                          size: 48, color: kGrey)),
-                ),
-        ),
+  static final RegExp _linkRe = RegExp(r'https?://[^\s]+');
+
+  bool _isPdfLink(String u) {
+    final l = u.toLowerCase().split('?').first;
+    return l.endsWith('.pdf') || _driveId(u) != null;
+  }
+
+  // Google Drive photo ho to badi (w1200) photo, warna waisi hi
+  String _bigImg(String raw) {
+    final id = _driveId(raw.trim());
+    if (id != null) return 'https://lh3.googleusercontent.com/d/$id=w1200';
+    return imageUrl(raw);
+  }
+
+  Widget _fullImage(String raw) {
+    final img = _bigImg(raw);
+    if (img.isEmpty) return const SizedBox.shrink();
+    return CachedNetworkImage(
+      imageUrl: img,
+      width: double.infinity,
+      fit: BoxFit.fitWidth,
+      placeholder: (_, __) => SizedBox(
+        height: 200,
+        child: Center(
+            child: CircularProgressIndicator(
+                strokeWidth: 2, color: AppDesign.brand)),
+      ),
+      errorWidget: (_, __, ___) => const SizedBox(
+        height: 120,
+        child: Center(
+            child: Icon(Icons.broken_image_outlined, size: 48, color: kGrey)),
       ),
     );
   }
 
-  Widget _videoCard(DbRow r) {
-    final title = '${r['title'] ?? ''}'.trim();
-    final url = '${r['url'] ?? ''}'.trim();
-    var img = imageUrl(r['image_url'] as String?);
-    if (img.isEmpty) {
-      final yt = youtubeId(url);
-      if (yt != null) img = 'https://img.youtube.com/vi/$yt/hqdefault.jpg';
+  Widget _textBlock(String t) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+        child: SelectableText(t,
+            style: const TextStyle(
+                fontSize: 16, height: 1.5, color: Color(0xFF1F2937))),
+      );
+
+  Widget _linkWidget(String link, String title) {
+    if (_AutoCard._isTxt(link)) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+        child: ColoredTxtView(url: link),
+      );
     }
-    final fallback = Container(
-      color: kThumbBg,
-      child: Center(
-          child: Icon(Icons.play_circle_fill, color: AppDesign.brand, size: 56)),
-    );
-    return appCard(
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      child: InkWell(
-        onTap: url.isEmpty
-            ? null
-            : () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => VideoPlayerScreen(url: url)),
-                ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            AspectRatio(
-              aspectRatio: 16 / 9,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  img.isEmpty
-                      ? fallback
-                      : CachedNetworkImage(
-                          imageUrl: img,
-                          fit: BoxFit.cover,
-                          placeholder: (_, __) => Container(color: kThumbBg),
-                          errorWidget: (_, __, ___) => fallback,
-                        ),
-                  Center(
-                    child: Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: const BoxDecoration(
-                          color: Colors.black45, shape: BoxShape.circle),
-                      child: const Icon(Icons.play_arrow,
-                          color: Colors.white, size: 34),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-              child: Text(
-                title,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF1F2937)),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    if (_AutoCard._isImg(link)) return _fullImage(link);
+    if (_isPdfLink(link)) {
+      return _AutoWebView(
+        title: title,
+        url: pdfUrl(link),
+        minHeight: MediaQuery.of(context).size.height * 0.68,
+      );
+    }
+    return _AutoWebView(title: title, url: link);
   }
 
-  Widget _photoCard(DbRow r) {
+  // Text + link (PDF / txt / web / sirf text)
+  Widget _textLinkItem(DbRow r) {
     final title = '${r['title'] ?? ''}'.trim();
     final body = '${r['body'] ?? ''}'.trim();
-    final p1 = '${r['image_url'] ?? ''}'.trim();
-    final p2 = '${r['image_url2'] ?? ''}'.trim();
-    final Widget pics = (p1.isNotEmpty && p2.isNotEmpty)
-        ? Row(
-            children: [
-              Expanded(child: _pic(p1)),
-              const SizedBox(width: 14),
-              Expanded(child: _pic(p2)),
-            ],
-          )
-        : _pic(p1.isNotEmpty ? p1 : p2, ratio: 16 / 10);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 22),
-      child: Column(
-        children: [
-          pics,
-          if (title.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: Text(
-                title,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF1F2937)),
-              ),
-            ),
-          if (body.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(body,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 14, color: kGrey)),
-            ),
-        ],
-      ),
-    );
-  }
+    final url = '${r['url'] ?? ''}'.trim();
 
-  Widget _item(DbRow r) {
-    final type = '${r['type'] ?? ''}';
-    final p1 = '${r['image_url'] ?? ''}'.trim();
-    final p2 = '${r['image_url2'] ?? ''}'.trim();
-    if (type == 'video') return _videoCard(r);
-    if (type != 'pdf' && (p1.isNotEmpty || p2.isNotEmpty)) {
-      return _photoCard(r);
+    final parts = <Widget>[];
+    final seen = <String>{};
+    var last = 0;
+    for (final m in _linkRe.allMatches(body)) {
+      final link = m.group(0)!.replaceAll(RegExp(r'[).,;]+$'), '');
+      final before = body.substring(last, m.start).trim();
+      if (before.isNotEmpty) parts.add(_textBlock(before));
+      seen.add(link);
+      parts.add(_linkWidget(link, title));
+      last = m.start + link.length;
     }
-    // PDF / txt / sirf text: text + link seedha card me load
-    return _AutoCard(
-      title: '${r['title'] ?? ''}'.trim(),
-      body: '${r['body'] ?? ''}'.trim(),
-      url: '${r['url'] ?? ''}'.trim(),
-    );
-  }
-
-  // ------------------------------------------------------------------
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppDesign.bg,
-      appBar: AppBar(
-        title: Text('${widget.chapter['name'] ?? ''}'),
-        backgroundColor: AppDesign.brand,
-        foregroundColor: Colors.white,
-      ),
-      body: FutureBuilder<_ChipData>(
-        future: _future,
-        builder: (context, snap) {
-          if (snap.connectionState != ConnectionState.done) {
-            return Center(
-                child: CircularProgressIndicator(color: AppDesign.brand));
-          }
-          if (snap.hasError || snap.data == null) {
-            return _Message(
-              text: 'Data load nahi hua. Internet check karein.',
-              onRetry: _reload,
-            );
-          }
-          final d = snap.data!;
-          final ids = d.chips.map((c) => '${c['id']}').toList();
-          final sel = (_sel != null && ids.contains(_sel))
-              ? _sel!
-              : (ids.isNotEmpty ? ids.first : '_none');
-          final rows = d.chips.isEmpty
-              ? d.rows
-              : d.rows.where((r) => _chipOf(r, d.chips) == sel).toList();
-
-          return Column(
-            children: [
-              if (d.chips.isNotEmpty) _chipBar(d.chips, sel),
-              Expanded(
-                child: RefreshIndicator(
-                  color: AppDesign.brand,
-                  onRefresh: _reload,
-                  child: rows.isEmpty
-                      ? ListView(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          children: const [
-                            SizedBox(height: 120),
-                            Center(
-                              child: Text('Jald aayega',
-                                  style:
-                                      TextStyle(color: kGrey, fontSize: 18)),
-                            ),
-                          ],
-                        )
-                      : ListView.builder(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          padding: const EdgeInsets.fromLTRB(14, 10, 14, 24),
-                          itemCount: rows.length,
-                          itemBuilder: (context, i) => _item(rows[i]),
-                        ),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
+    final tail = body.substring(last).trim();
+    if (tail.isNotEmpty) parts.add(_textBlock(tail));
+    if (_linkRe.hasMatch(url) && !seen.contains(url)) {
+      parts.add
