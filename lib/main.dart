@@ -728,4 +728,358 @@ class _SubjectGridScreenState extends State<SubjectGridScreen> {
   }
 }
 
-class Chapter
+class ChapterListScreen extends StatelessWidget {
+  final DbRow subject;
+  final DbRow? parent; // sub-chapter list ke liye: upar wala chapter
+  const ChapterListScreen({super.key, required this.subject, this.parent});
+
+  @override
+  Widget build(BuildContext context) {
+    return ColorRowsScreen(
+      title: parent == null ? '${subject['name']}' : '${parent!['name']}',
+      fallbackIcon: Icons.menu_book,
+      numbered: true,
+      loader: () async {
+        var q = _db.from('chapters').select().eq('subject_id', subject['id']);
+        q = parent == null
+            ? q.isFilter('parent_id', null)
+            : q.eq('parent_id', parent!['id']);
+        return List<DbRow>.from(await q.order('sort_order', ascending: true));
+      },
+      onTap: (context, chapter) async {
+        // Agar is chapter ke andar chhote chapters hain to wo dikhao, nahi to content
+        List kids = [];
+        try {
+          kids = await _db
+              .from('chapters')
+              .select('id')
+              .eq('parent_id', chapter['id'])
+              .limit(1);
+        } catch (_) {}
+        if (!context.mounted) return;
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => kids.isNotEmpty
+                ? ChapterListScreen(subject: subject, parent: chapter)
+                : ChipContentScreen(chapter: chapter, subject: subject),
+          ),
+        );
+      },
+    );
+  }
+}
+
+// Content: Videos / MCQ / Book (purani 3-tab screen; ab ChipContentScreen use hoti hai)
+
+class ContentScreen extends StatefulWidget {
+  final DbRow chapter;
+  const ContentScreen({super.key, required this.chapter});
+
+  @override
+  State<ContentScreen> createState() => _ContentScreenState();
+}
+
+class _ContentScreenState extends State<ContentScreen> {
+  late Future<List<DbRow>> _future = _load();
+
+  Future<List<DbRow>> _load() async => List<DbRow>.from(await _db
+      .from('contents')
+      .select()
+      .eq('chapter_id', widget.chapter['id'])
+      .order('sort_order', ascending: true));
+
+  @override
+  Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text('${widget.chapter['name']}'),
+          backgroundColor: AppDesign.brand,
+          foregroundColor: Colors.white,
+          bottom: const TabBar(
+            indicatorColor: Colors.white,
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white70,
+            tabs: [
+              Tab(icon: Icon(Icons.video_library), text: 'Videos'),
+              Tab(icon: Icon(Icons.quiz), text: 'MCQ'),
+              Tab(icon: Icon(Icons.menu_book), text: 'Book'),
+            ],
+          ),
+        ),
+        body: FutureBuilder<List<DbRow>>(
+          future: _future,
+          builder: (context, snap) {
+            if (snap.connectionState != ConnectionState.done) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snap.hasError) {
+              return _Message(
+                  text: 'Data load nahi hua.',
+                  onRetry: () => setState(() => _future = _load()));
+            }
+            final all = snap.data ?? [];
+            List<DbRow> of(String t) => all.where((r) => r['type'] == t).toList();
+            return TabBarView(children: [
+              _FileList(
+                  items: of('video'),
+                  icon: Icons.play_circle_fill,
+                  empty: 'Videos jald aayenge',
+                  isVideo: true,
+                  open: (r) => r['url'] as String),
+              _FileList(
+                  items: of('pdf'),
+                  icon: Icons.quiz,
+                  empty: 'MCQ jald aayenge',
+                  open: (r) => pdfUrl(r['url'] as String)),
+              _QaList(items: of('qa')),
+            ]);
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _FileList extends StatelessWidget {
+  final List<DbRow> items;
+  final IconData icon;
+  final String empty;
+  final String Function(DbRow) open;
+  final bool isVideo;
+  const _FileList(
+      {required this.items,
+      required this.icon,
+      required this.empty,
+      required this.open,
+      this.isVideo = false});
+
+  // Photo: pehle aapka diya image_url, nahi to YouTube ka apna thumbnail, nahi to icon
+  Widget _img(DbRow r, double iconSize) {
+    var img = imageUrl(r['image_url'] as String?);
+    if (img.isEmpty && isVideo) {
+      final yt = youtubeId((r['url'] ?? '').toString());
+      if (yt != null) img = 'https://img.youtube.com/vi/$yt/hqdefault.jpg';
+    }
+    final fallback = Container(
+      color: kThumbBg,
+      child: Center(child: Icon(icon, color: AppDesign.brand, size: iconSize)),
+    );
+    if (img.isEmpty) return fallback;
+    return CachedNetworkImage(
+      imageUrl: img,
+      fit: BoxFit.cover,
+      width: double.infinity,
+      height: double.infinity,
+      placeholder: (_, __) => Container(color: kThumbBg),
+      errorWidget: (_, __, ___) => fallback,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) {
+      return Center(
+          child: Text(empty, style: const TextStyle(color: kGrey, fontSize: 18)));
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: items.length,
+      itemBuilder: (context, i) {
+        final r = items[i];
+        // Video ke alawa (MCQ / pdf wali list) har link seedha card me load ho
+        if (!isVideo) {
+          return _AutoCard(
+            title: '${r['title'] ?? ''}'.trim(),
+            body: '${r['body'] ?? ''}'.trim(),
+            url: '${r['url'] ?? ''}'.trim(),
+          );
+        }
+        void openIt() => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (_) => isVideo
+                      ? VideoPlayerScreen(url: open(r))
+                      : WebViewScreen(title: '${r['title']}', url: open(r))),
+            );
+        final title = Text(
+          '${r['title']}',
+          style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF1F2937)),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        );
+        return appCard(
+          margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          child: InkWell(
+            onTap: openIt,
+            child: isVideo
+                // Video: bada card, upar 16:9 photo, neeche title
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      AspectRatio(
+                        aspectRatio: 16 / 9,
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            _img(r, 56),
+                            Center(
+                              child: Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: const BoxDecoration(
+                                    color: Colors.black45,
+                                    shape: BoxShape.circle),
+                                child: const Icon(Icons.play_arrow,
+                                    color: Colors.white, size: 34),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                        child: title,
+                      ),
+                    ],
+                  )
+                // PDF: chhota photo/icon baayein, title daayein
+                : Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Row(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: SizedBox(
+                              width: 72, height: 72, child: _img(r, 34)),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(child: title),
+                      ],
+                    ),
+                  ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _QaList extends StatelessWidget {
+  final List<DbRow> items;
+  const _QaList({required this.items});
+
+  // Ek square card me photo (poori dikhe, kate nahi)
+  Widget _pic(String? raw, {double ratio = 1}) {
+    final img = imageUrl(raw);
+    return appCard(
+      child: AspectRatio(
+        aspectRatio: ratio,
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: img.isEmpty
+              ? const Center(
+                  child: Icon(Icons.image_outlined, size: 48, color: kThumbBg))
+              : CachedNetworkImage(
+                  imageUrl: img,
+                  fit: BoxFit.contain,
+                  placeholder: (_, __) => const Center(
+                      child: CircularProgressIndicator(strokeWidth: 2)),
+                  errorWidget: (_, __, ___) => const Center(
+                      child: Icon(Icons.broken_image_outlined,
+                          size: 48, color: kGrey)),
+                ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) {
+      return const Center(
+          child: Text('Book jald aayegi',
+              style: TextStyle(color: kGrey, fontSize: 18)));
+    }
+    return ListView.builder(
+      itemCount: items.length,
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
+      itemBuilder: (context, i) {
+        final r = items[i];
+        final title = '${r['title'] ?? ''}';
+        final body = '${r['body'] ?? ''}';
+        final hasPics = (r['image_url'] ?? '').toString().trim().isNotEmpty ||
+            (r['image_url2'] ?? '').toString().trim().isNotEmpty;
+
+        // Photo nahi hai: text + koi bhi link (pdf / drive / txt / json / photo) seedha load ho
+        if (!hasPics) {
+          return _AutoCard(
+              title: title, body: body, url: '${r['url'] ?? ''}'.trim());
+        }
+
+        final p1 = '${r['image_url'] ?? ''}'.trim();
+        final p2 = '${r['image_url2'] ?? ''}'.trim();
+
+        // Dono photo ho to Double card (ek line me 2), ek hi ho to Single card (poori chaudai)
+        final Widget pics = (p1.isNotEmpty && p2.isNotEmpty)
+            ? Row(
+                children: [
+                  Expanded(child: _pic(p1)),
+                  const SizedBox(width: 14),
+                  Expanded(child: _pic(p2)),
+                ],
+              )
+            : _pic(p1.isNotEmpty ? p1 : p2, ratio: 16 / 10);
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 22),
+          child: Column(
+            children: [
+              pics,
+              if (title.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Text(
+                    title,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1F2937)),
+                  ),
+                ),
+              if (body.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(body,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 14, color: kGrey)),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+// Video aur PDF dono isi me khulte hain
+
+/// Card ke andar hi Drive / pdf / txt / json file live dikhti hai
+class _InlineDoc extends StatefulWidget {
+  final String title;
+  final String url;
+  final bool card; // false: sirf viewer (kisi bade card ke andar)
+  const _InlineDoc({required this.title, required this.url, this.card = true});
+
+  @override
+  State<_InlineDoc> createState() => _InlineDocState();
+}
+
+class _InlineDocState extends State<_InlineDoc> {
+  late final WebViewController _c = WebViewController()
+    ..setJavaScriptMode(JavaScript
