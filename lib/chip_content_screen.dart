@@ -93,11 +93,13 @@ class _ChipContentScreenState extends State<ChipContentScreen> {
   // ------------------------------------------------------------------
   Widget _chip(DbRow c, bool on, int i) {
     final img = imageUrl(c['image_url'] as String?);
+    final box = on ? 102.0 : 90.0; // chuna hua chip thoda bada
+    final ic = on ? 50.0 : 46.0;
     final fallback = Icon(_catIcon(c['type']),
         size: 28, color: on ? AppDesign.brand : kGrey);
     final icon = Container(
-      width: 46,
-      height: 46,
+      width: ic,
+      height: ic,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(13),
@@ -116,41 +118,58 @@ class _ChipContentScreenState extends State<ChipContentScreen> {
     );
     return GestureDetector(
       onTap: () => setState(() => _sel = '${c['id']}'),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        width: 94,
-        height: 94,
-        margin: const EdgeInsets.only(right: 10),
-        padding: const EdgeInsets.fromLTRB(6, 8, 6, 6),
-        decoration: BoxDecoration(
-          color: on ? AppDesign.brand : AppDesign.rowColor(i),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-              color: on ? AppDesign.brand : Colors.black12,
-              width: 1.2),
-          boxShadow: on
-              ? [
-                  BoxShadow(
-                      color: AppDesign.brand.withAlpha(90),
-                      blurRadius: 8,
-                      offset: const Offset(0, 3))
-                ]
-              : null,
-        ),
+      child: Padding(
+        padding: const EdgeInsets.only(right: 10),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            icon,
-            const SizedBox(height: 7),
-            Text(
-              '${c['name'] ?? ''}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w700,
-                color: on ? Colors.white : const Color(0xFF1F2937),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              width: box,
+              height: box,
+              padding: const EdgeInsets.fromLTRB(6, 8, 6, 6),
+              decoration: BoxDecoration(
+                color: on ? AppDesign.brand : AppDesign.rowColor(i),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                    color: on ? AppDesign.brand : Colors.black12, width: 1.2),
+                boxShadow: on
+                    ? [
+                        BoxShadow(
+                            color: AppDesign.brand.withAlpha(90),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3))
+                      ]
+                    : null,
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  icon,
+                  const SizedBox(height: 7),
+                  Text(
+                    '${c['name'] ?? ''}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: on ? 13.5 : 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: on ? Colors.white : const Color(0xFF1F2937),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 6),
+            // Chuna hua chip ke neeche nishaan (chhoti patti)
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              width: on ? 34 : 0,
+              height: 5,
+              decoration: BoxDecoration(
+                color: AppDesign.brand,
+                borderRadius: BorderRadius.circular(3),
               ),
             ),
           ],
@@ -166,7 +185,7 @@ class _ChipContentScreenState extends State<ChipContentScreen> {
         border: const Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
       ),
       child: SizedBox(
-        height: 114,
+        height: 134,
         child: ListView(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.fromLTRB(14, 10, 4, 10),
@@ -399,4 +418,3 @@ class _ChipContentScreenState extends State<ChipContentScreen> {
       ),
     );
   }
-}
