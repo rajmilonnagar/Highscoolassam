@@ -1,4 +1,4 @@
-0// Ye file main.dart ka hissa (part) hai. main.dart me ye line pehle se honi chahiye:
+// Ye file main.dart ka hissa (part) hai. main.dart me ye line pehle se honi chahiye:
 //   part 'chip_content_screen.dart';
 part of 'main.dart';
 
