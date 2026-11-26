@@ -1082,4 +1082,339 @@ class _InlineDoc extends StatefulWidget {
 
 class _InlineDocState extends State<_InlineDoc> {
   late final WebViewController _c = WebViewController()
-    ..setJavaScriptMode(JavaScript
+    ..setJavaScriptMode(JavaScriptMode.unrestricted)
+    ..setBackgroundColor(Colors.white)
+    ..loadRequest(Uri.parse(widget.url));
+
+  void _full() => Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => WebViewScreen(
+                title: widget.title.isEmpty ? 'File' : widget.title,
+                url: widget.url)),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final h = MediaQuery.of(context).size.height * 0.68;
+    final view = SizedBox(
+      height: h,
+      child: WebViewWidget(
+        controller: _c,
+        gestureRecognizers: {
+          Factory<OneSequenceGestureRecognizer>(() => EagerGestureRecognizer()),
+        },
+      ),
+    );
+    if (!widget.card) {
+      return Stack(
+        children: [
+          view,
+          Positioned(
+            top: 4,
+            right: 4,
+            child: Material(
+              color: Colors.white70,
+              shape: const CircleBorder(),
+              child: IconButton(
+                tooltip: 'Poori screen',
+                icon: Icon(Icons.open_in_full, color: AppDesign.brand, size: 20),
+                onPressed: _full,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+    return appCard(
+      margin: const EdgeInsets.symmetric(vertical: 7),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 6, 4, 0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(widget.title,
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.bold)),
+                ),
+                IconButton(
+                  tooltip: 'Poori screen',
+                  icon: Icon(Icons.open_in_full, color: AppDesign.brand),
+                  onPressed: _full,
+                ),
+              ],
+            ),
+          ),
+          view,
+        ],
+      ),
+    );
+  }
+}
+
+/// Ek card: title + text + us text/url ke andar ka har link apne aap load hokar dikhta hai
+class _AutoCard extends StatelessWidget {
+  final String title;
+  final String body;
+  final String url;
+  const _AutoCard({required this.title, required this.body, required this.url});
+
+  static final _re = RegExp(r'https?://[^\s]+');
+
+  static bool _isImg(String u) {
+    final l = u.toLowerCase().split('?').first;
+    return l.endsWith('.jpg') ||
+        l.endsWith('.jpeg') ||
+        l.endsWith('.png') ||
+        l.endsWith('.gif') ||
+        l.endsWith('.webp') ||
+        u.contains('googleusercontent.com');
+  }
+
+  Widget _link(String link) {
+    if (_isImg(link)) {
+      final img = imageUrl(link);
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: CachedNetworkImage(
+            imageUrl: img.isEmpty ? link : img,
+            width: double.infinity,
+            fit: BoxFit.fitWidth,
+            placeholder: (_, __) => const SizedBox(
+                height: 120,
+                child: Center(child: CircularProgressIndicator())),
+            errorWidget: (_, __, ___) => const SizedBox(
+                height: 80, child: Center(child: Icon(Icons.broken_image))),
+          ),
+        ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: _InlineDoc(title: title, url: pdfUrl(link), card: false),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final parts = <Widget>[];
+    final seen = <String>{};
+    var last = 0;
+    for (final m in _re.allMatches(body)) {
+      final raw = m.group(0)!;
+      final link = raw.replaceAll(RegExp(r'[).,;]+$'), '');
+      final before = body.substring(last, m.start).trim();
+      if (before.isNotEmpty) {
+        parts.add(Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: SelectableText(before, style: const TextStyle(height: 1.5)),
+        ));
+      }
+      seen.add(link);
+      parts.add(_link(link));
+      last = m.start + link.length;
+    }
+    final tail = body.substring(last).trim();
+    if (tail.isNotEmpty) {
+      parts.add(Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: SelectableText(tail, style: const TextStyle(height: 1.5)),
+      ));
+    }
+    if (_re.hasMatch(url) && !seen.contains(url)) parts.add(_link(url));
+
+    return appCard(
+      margin: const EdgeInsets.symmetric(vertical: 7),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (title.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text(title,
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
+            ...parts,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class WebViewScreen extends StatefulWidget {
+  final String title;
+  final String url;
+  const WebViewScreen({super.key, required this.title, required this.url});
+
+  @override
+  State<WebViewScreen> createState() => _WebViewScreenState();
+}
+
+class _WebViewScreenState extends State<WebViewScreen> {
+  late final WebViewController _c = WebViewController()
+    ..setJavaScriptMode(JavaScriptMode.unrestricted)
+    ..setBackgroundColor(Colors.black)
+    ..loadRequest(Uri.parse(widget.url));
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.title),
+        backgroundColor: AppDesign.brand,
+        foregroundColor: Colors.white,
+      ),
+      body: WebViewWidget(controller: _c),
+    );
+  }
+}
+
+// Video: click karte hi full screen (landscape), back dabate hi chapter me wapas
+
+class VideoPlayerScreen extends StatefulWidget {
+  final String url;
+  const VideoPlayerScreen({super.key, required this.url});
+
+  @override
+  State<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
+}
+
+class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
+  late final WebViewController _c;
+  bool _showSeek = false;
+
+  @override
+  void initState() {
+    super.initState();
+    SystemChrome.setPreferredOrientations(
+        [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+
+    _c = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(Colors.black);
+
+    if (_c.platform is AndroidWebViewController) {
+      (_c.platform as AndroidWebViewController)
+          .setMediaPlaybackRequiresUserGesture(false);
+    }
+
+    final yt = youtubeId(widget.url);
+    if (yt != null && kYoutubeWatchPage) {
+      // YouTube ka embed 152-4 error deta hai, isliye seedha watch page kholte hain.
+      _c.loadRequest(Uri.parse('https://m.youtube.com/watch?v=$yt'));
+    } else if (yt != null) {
+      // rel=0: sirf aapke channel ke suggestions, fs=0: YouTube ka fullscreen button nahi
+      final html = '''
+<html><body style="margin:0;background:#000">
+<iframe style="position:fixed;inset:0;width:100%;height:100%;border:0"
+ src="https://www.youtube.com/embed/$yt?autoplay=1&rel=0&playsinline=1&fs=0&modestbranding=1&enablejsapi=1&origin=https://com.highschool.assam"
+ allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+</body></html>''';
+      _c.loadHtmlString(html, baseUrl: 'https://com.highschool.assam');
+    } else {
+      _c.loadRequest(Uri.parse(videoUrl(widget.url)));
+    }
+  }
+
+  // Video ko aage/piche karna ya roknaa/chalana (page ke video element par)
+  void _seek(int sec) => _c.runJavaScript(
+      "var v=document.querySelector('video'); if(v){v.currentTime=Math.max(0,v.currentTime+($sec));}");
+
+  void _toggle() => _c.runJavaScript(
+      "var v=document.querySelector('video'); if(v){ if(v.paused){v.play();}else{v.pause();} }");
+
+  @override
+  void dispose() {
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          Positioned.fill(child: WebViewWidget(controller: _c)),
+          Positioned(
+            top: 8,
+            left: 8,
+            child: SafeArea(
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(30),
+                  onTap: () => Navigator.pop(context),
+                  child: Ink(
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFE91E63), Color(0xFFFF9800)],
+                      ),
+                      borderRadius: BorderRadius.circular(30),
+                      boxShadow: const [
+                        BoxShadow(color: Colors.black54, blurRadius: 6),
+                      ],
+                    ),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.arrow_back, color: Colors.white),
+                          SizedBox(width: 6),
+                          Text('Back',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (_showSeek)
+            Positioned(
+              bottom: 12,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final b in [
+                      [Icons.replay_10, () => _seek(-10)],
+                      [Icons.play_arrow, _toggle],
+                      [Icons.forward_10, () => _seek(10)],
+                    ])
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        child: IconButton(
+                          style: IconButton.styleFrom(
+                              backgroundColor: Colors.black45),
+                          icon: Icon(b[0] as IconData, color: Colors.white70),
+                          onPressed: b[1] as VoidCallback,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
