@@ -361,4 +361,354 @@ class _ChipContentScreenState extends State<ChipContentScreen> {
     );
   }
 
-  Widget _textBlock
+  Widget _textBlock(String t) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+        child: SelectableText(t,
+            style: const TextStyle(
+                fontSize: 16, height: 1.5, color: Color(0xFF1F2937))),
+      );
+
+  Widget _linkWidget(String link, String title) {
+    if (_AutoCard._isTxt(link)) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+        child: ColoredTxtView(url: link),
+      );
+    }
+    if (_AutoCard._isImg(link)) return _fullImage(link);
+    // Drive link: pehle dekhte hain txt hai ya PDF
+    if (_driveId(link) != null) {
+      return _DriveFile(
+        link: link,
+        title: title,
+        minHeight: MediaQuery.of(context).size.height * 0.68,
+      );
+    }
+    if (_isPdfLink(link)) {
+      return _AutoWebView(
+        title: title,
+        url: pdfUrl(link),
+        minHeight: MediaQuery.of(context).size.height * 0.68,
+      );
+    }
+    return _AutoWebView(title: title, url: link);
+  }
+
+  // Text + link (PDF / txt / web / sirf text)
+  Widget _textLinkItem(DbRow r) {
+    final title = '${r['title'] ?? ''}'.trim();
+    final body = '${r['body'] ?? ''}'.trim();
+    final url = '${r['url'] ?? ''}'.trim();
+
+    final parts = <Widget>[];
+    final seen = <String>{};
+    var last = 0;
+    for (final m in _linkRe.allMatches(body)) {
+      final link = m.group(0)!.replaceAll(RegExp(r'[).,;]+$'), '');
+      final before = body.substring(last, m.start).trim();
+      if (before.isNotEmpty) parts.add(_textBlock(before));
+      seen.add(link);
+      parts.add(_linkWidget(link, title));
+      last = m.start + link.length;
+    }
+    final tail = body.substring(last).trim();
+    if (tail.isNotEmpty) parts.add(_textBlock(tail));
+    if (_linkRe.hasMatch(url) && !seen.contains(url)) {
+      parts.add(_linkWidget(url, title));
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (title.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+            child: Text(title,
+                style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1F2937))),
+          ),
+        ...parts,
+        const SizedBox(height: 4),
+      ],
+    );
+  }
+
+  // Photo (1 ya 2) + caption (title / body)
+  Widget _imageItem(DbRow r) {
+    final title = '${r['title'] ?? ''}'.trim();
+    final body = '${r['body'] ?? ''}'.trim();
+    final p1 = '${r['image_url'] ?? ''}'.trim();
+    final p2 = '${r['image_url2'] ?? ''}'.trim();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (p1.isNotEmpty) _fullImage(p1),
+        if (p2.isNotEmpty) _fullImage(p2),
+        if (title.isNotEmpty || body.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+            child: Column(
+              children: [
+                if (title.isNotEmpty)
+                  Text(title,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF1F2937))),
+                if (body.isNotEmpty)
+                  Padding(
+                    padding: EdgeInsets.only(top: title.isNotEmpty ? 4 : 0),
+                    child: Text(body,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 14, color: kGrey)),
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _videoItem(DbRow r) {
+    final title = '${r['title'] ?? ''}'.trim();
+    final url = '${r['url'] ?? ''}'.trim();
+    var img = imageUrl(r['image_url'] as String?);
+    if (img.isEmpty) {
+      final yt = youtubeId(url);
+      if (yt != null) img = 'https://img.youtube.com/vi/$yt/hqdefault.jpg';
+    }
+    final fallback = Container(
+      color: kThumbBg,
+      child: Center(
+          child: Icon(Icons.play_circle_fill, color: AppDesign.brand, size: 56)),
+    );
+    return InkWell(
+      onTap: url.isEmpty
+          ? null
+          : () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => VideoPlayerScreen(url: url)),
+              ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AspectRatio(
+            aspectRatio: 16 / 9,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                img.isEmpty
+                    ? fallback
+                    : CachedNetworkImage(
+                        imageUrl: img,
+                        fit: BoxFit.cover,
+                        placeholder: (_, __) => Container(color: kThumbBg),
+                        errorWidget: (_, __, ___) => fallback,
+                      ),
+                Center(
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: const BoxDecoration(
+                        color: Colors.black45, shape: BoxShape.circle),
+                    child: const Icon(Icons.play_arrow,
+                        color: Colors.white, size: 34),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (title.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+              child: Text(
+                title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1F2937)),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _item(DbRow r) {
+    final type = '${r['type'] ?? ''}';
+    final p1 = '${r['image_url'] ?? ''}'.trim();
+    final p2 = '${r['image_url2'] ?? ''}'.trim();
+    if (type == 'video') return _videoItem(r);
+    if (type != 'pdf' && (p1.isNotEmpty || p2.isNotEmpty)) {
+      return _imageItem(r);
+    }
+    return _textLinkItem(r);
+  }
+
+  // Card: poori chaudai, bahar koi gap nahi, do cards ke beech sirf 1px line
+  Widget _cardShell(int i, DbRow r) {
+    return _KeepAlive(
+      key: ValueKey('${r['id']}_$i'),
+      child: Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: AppDesign.cardBase,
+          border: i == 0
+              ? null
+              : const Border(top: BorderSide(color: _kLine, width: 1)),
+        ),
+        child: _item(r),
+      ),
+    );
+  }
+
+  // ------------------------------------------------------------------
+  Widget _center(Widget w) => SliverFillRemaining(
+        hasScrollBody: false,
+        child: Center(child: w),
+      );
+
+  List<Widget> _contentSlivers() {
+    if (_chipsLoading || _rowsLoading) {
+      return [
+        _center(CircularProgressIndicator(color: AppDesign.brand)),
+      ];
+    }
+    if (_chipsError) {
+      return [
+        _center(_Message(
+          text: 'Data load nahi hua. Internet check karein.',
+          onRetry: _loadChips,
+        )),
+      ];
+    }
+    if (_rowsError) {
+      return [
+        _center(_Message(
+          text: 'Data load nahi hua. Internet check karein.',
+          onRetry: _loadRows,
+        )),
+      ];
+    }
+    if (_rows.isEmpty) {
+      return [
+        _center(const Text('Jald aayega',
+            style: TextStyle(color: kGrey, fontSize: 18))),
+      ];
+    }
+    return [
+      SliverList(
+        delegate: SliverChildBuilderDelegate(
+          (context, i) => _cardShell(i, _rows[i]),
+          childCount: _rows.length,
+        ),
+      ),
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final topPad = MediaQuery.of(context).padding.top;
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light
+          .copyWith(statusBarColor: Colors.transparent),
+      child: Scaffold(
+        backgroundColor: AppDesign.bg,
+        // Neeche ki navigation bar ke liye SafeArea
+        body: SafeArea(
+          top: false,
+          child: Column(
+            children: [
+              // Status bar ki jagah hamesha brand rang
+              Container(height: topPad, color: AppDesign.brand),
+              Expanded(
+                child: RefreshIndicator(
+                  color: AppDesign.brand,
+                  onRefresh: _refresh,
+                  child: CustomScrollView(
+                    controller: _scroll,
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    slivers: [
+                      SliverAppBar(
+                        floating: true,
+                        snap: true,
+                        pinned: false,
+                        primary: false,
+                        toolbarHeight: 44,
+                        elevation: 0,
+                        scrolledUnderElevation: 0,
+                        surfaceTintColor: Colors.transparent,
+                        backgroundColor: AppDesign.brand,
+                        foregroundColor: Colors.white,
+                        titleSpacing: 0,
+                        title: Text(
+                          '${widget.chapter['name'] ?? ''}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontSize: 17, fontWeight: FontWeight.w600),
+                        ),
+                        bottom: _chips.isNotEmpty
+                            ? PreferredSize(
+                                preferredSize: const Size.fromHeight(_chipBarH),
+                                child: _chipBar(),
+                              )
+                            : null,
+                      ),
+                      ..._contentSlivers(),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Tab ke andar ke items scroll hone par bhi bane rahein (webview dobara load
+// na ho aur unki unchai na badle)
+// ---------------------------------------------------------------------------
+class _KeepAlive extends StatefulWidget {
+  final Widget child;
+  const _KeepAlive({super.key, required this.child});
+
+  @override
+  State<_KeepAlive> createState() => _KeepAliveState();
+}
+
+class _KeepAliveState extends State<_KeepAlive>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Web link: page ki poori unchai tak failta hai, andar alag scroll nahi.
+// Upar/neeche ka drag seedha poore page ko scroll karta hai.
+// ---------------------------------------------------------------------------
+class _AutoWebView extends StatefulWidget {
+  final String title;
+  final String url;
+  final double minHeight;
+  const _AutoWebView({
+    required this.title,
+    required this.url,
+    this.minHeight = 300,
+  });
+
+  @override
+  State<_Auto
