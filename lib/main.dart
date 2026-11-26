@@ -1175,4 +1175,376 @@ class _AutoCard extends StatelessWidget {
   }
 
   static bool _isTxt(String u) =>
-      u.toLower
+      u.toLowerCase().split('?').first.endsWith('.txt');
+
+  Widget _link(String link) {
+    // .txt link: question laal, answer neela, poori lambai (andar scroll nahi)
+    if (_isTxt(link)) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: ColoredTxtView(url: link),
+      );
+    }
+    if (_isImg(link)) {
+      final img = imageUrl(link);
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: CachedNetworkImage(
+            imageUrl: img.isEmpty ? link : img,
+            width: double.infinity,
+            fit: BoxFit.fitWidth,
+            placeholder: (_, __) => const SizedBox(
+                height: 120,
+                child: Center(child: CircularProgressIndicator())),
+            errorWidget: (_, __, ___) => const SizedBox(
+                height: 80, child: Center(child: Icon(Icons.broken_image))),
+          ),
+        ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: _InlineDoc(title: title, url: pdfUrl(link), card: false),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final parts = <Widget>[];
+    final seen = <String>{};
+    var last = 0;
+    for (final m in _re.allMatches(body)) {
+      final raw = m.group(0)!;
+      final link = raw.replaceAll(RegExp(r'[).,;]+$'), '');
+      final before = body.substring(last, m.start).trim();
+      if (before.isNotEmpty) {
+        parts.add(Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: SelectableText(before, style: const TextStyle(height: 1.5)),
+        ));
+      }
+      seen.add(link);
+      parts.add(_link(link));
+      last = m.start + link.length;
+    }
+    final tail = body.substring(last).trim();
+    if (tail.isNotEmpty) {
+      parts.add(Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: SelectableText(tail, style: const TextStyle(height: 1.5)),
+      ));
+    }
+    if (_re.hasMatch(url) && !seen.contains(url)) parts.add(_link(url));
+
+    return appCard(
+      margin: const EdgeInsets.symmetric(vertical: 7),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (title.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text(title,
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
+            ...parts,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class WebViewScreen extends StatefulWidget {
+  final String title;
+  final String url;
+  const WebViewScreen({super.key, required this.title, required this.url});
+
+  @override
+  State<WebViewScreen> createState() => _WebViewScreenState();
+}
+
+class _WebViewScreenState extends State<WebViewScreen> {
+  late final WebViewController _c = WebViewController()
+    ..setJavaScriptMode(JavaScriptMode.unrestricted)
+    ..setBackgroundColor(Colors.black)
+    ..loadRequest(Uri.parse(widget.url));
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.title),
+        backgroundColor: AppDesign.brand,
+        foregroundColor: Colors.white,
+      ),
+      body: WebViewWidget(controller: _c),
+    );
+  }
+}
+
+// Video: click karte hi full screen (landscape), back dabate hi chapter me wapas
+
+class VideoPlayerScreen extends StatefulWidget {
+  final String url;
+  const VideoPlayerScreen({super.key, required this.url});
+
+  @override
+  State<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
+}
+
+class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
+  late final WebViewController _c;
+  bool _showSeek = false;
+
+  @override
+  void initState() {
+    super.initState();
+    SystemChrome.setPreferredOrientations(
+        [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+
+    _c = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(Colors.black);
+
+    if (_c.platform is AndroidWebViewController) {
+      (_c.platform as AndroidWebViewController)
+          .setMediaPlaybackRequiresUserGesture(false);
+    }
+
+    final yt = youtubeId(widget.url);
+    if (yt != null && kYoutubeWatchPage) {
+      // YouTube ka embed 152-4 error deta hai, isliye seedha watch page kholte hain.
+      _c.loadRequest(Uri.parse('https://m.youtube.com/watch?v=$yt'));
+    } else if (yt != null) {
+      // rel=0: sirf aapke channel ke suggestions, fs=0: YouTube ka fullscreen button nahi
+      final html = '''
+<html><body style="margin:0;background:#000">
+<iframe style="position:fixed;inset:0;width:100%;height:100%;border:0"
+ src="https://www.youtube.com/embed/$yt?autoplay=1&rel=0&playsinline=1&fs=0&modestbranding=1&enablejsapi=1&origin=https://com.highschool.assam"
+ allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+</body></html>''';
+      _c.loadHtmlString(html, baseUrl: 'https://com.highschool.assam');
+    } else {
+      _c.loadRequest(Uri.parse(videoUrl(widget.url)));
+    }
+  }
+
+  // Video ko aage/piche karna ya roknaa/chalana (page ke video element par)
+  void _seek(int sec) => _c.runJavaScript(
+      "var v=document.querySelector('video'); if(v){v.currentTime=Math.max(0,v.currentTime+($sec));}");
+
+  void _toggle() => _c.runJavaScript(
+      "var v=document.querySelector('video'); if(v){ if(v.paused){v.play();}else{v.pause();} }");
+
+  @override
+  void dispose() {
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          Positioned.fill(child: WebViewWidget(controller: _c)),
+          Positioned(
+            top: 8,
+            left: 8,
+            child: SafeArea(
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(30),
+                  onTap: () => Navigator.pop(context),
+                  child: Ink(
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFE91E63), Color(0xFFFF9800)],
+                      ),
+                      borderRadius: BorderRadius.circular(30),
+                      boxShadow: const [
+                        BoxShadow(color: Colors.black54, blurRadius: 6),
+                      ],
+                    ),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.arrow_back, color: Colors.white),
+                          SizedBox(width: 6),
+                          Text('Back',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (_showSeek)
+            Positioned(
+              bottom: 12,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final b in [
+                      [Icons.replay_10, () => _seek(-10)],
+                      [Icons.play_arrow, _toggle],
+                      [Icons.forward_10, () => _seek(10)],
+                    ])
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        child: IconButton(
+                          style: IconButton.styleFrom(
+                              backgroundColor: Colors.black45),
+                          icon: Icon(b[0] as IconData, color: Colors.white70),
+                          onPressed: b[1] as VoidCallback,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+
+// ---------------------------------------------------------------------------
+// .txt link: Question = laal (bold), Answer = neela. Poora text apni lambai me.
+//
+// Txt file me aise likho:
+//   Q no-1. বিহুৰ সামাজিক গুৰুত্ব কি?
+//   Ans:- বিহু অসমৰ মূল উৎসৱ।
+// ya answer alag line me:  উত্তৰঃ ...
+// Agle Q tak ki saari lines answer ke rang me aati hain.
+// File UTF-8 me save karni hai, warna Assamese/Bengali bigad jati hai.
+// ---------------------------------------------------------------------------
+class ColoredTxtView extends StatefulWidget {
+  final String url;
+  const ColoredTxtView({super.key, required this.url});
+
+  @override
+  State<ColoredTxtView> createState() => _ColoredTxtViewState();
+}
+
+class _ColoredTxtViewState extends State<ColoredTxtView> {
+  static const Color _qColor = Color(0xFFD32F2F); // laal
+  static const Color _aColor = Color(0xFF1565C0); // neela
+
+  // Question line ki shuruaat: Q no-1, Q1, Q., Question, প্রশ্ন / প্ৰশ্ন
+  static final RegExp _qStart = RegExp(
+    r'^\s*(Q\s*\.?\s*no|Q\s*\d|Q[.:)]|Question|প্রশ্ন|প্ৰশ্ন)',
+    caseSensitive: false,
+  );
+  // Line ke beech me "Ans:-" ya "Ans:"
+  static final RegExp _ansInline =
+      RegExp(r'\bAns\s*[:\-]+', caseSensitive: false);
+  // Line ki shuruaat me "উত্তৰঃ" / "উত্তরঃ"
+  static final RegExp _ansStart = RegExp(r'^\s*(উত্তৰ|উত্তর)\s*[:ঃ\-]');
+
+  late Future<List<TextSpan>> _future = _load();
+
+  Future<List<TextSpan>> _load() async {
+    final client = HttpClient();
+    try {
+      final req = await client.getUrl(Uri.parse(widget.url));
+      final res = await req.close();
+      if (res.statusCode != 200) throw Exception('HTTP ${res.statusCode}');
+      final bytes = await res.fold<List<int>>(<int>[], (a, b) => a..addAll(b));
+      return _build(utf8.decode(bytes, allowMalformed: true));
+    } finally {
+      client.close();
+    }
+  }
+
+  TextSpan _span(String t, bool answer) => TextSpan(
+        text: t,
+        style: TextStyle(
+          color: answer ? _aColor : _qColor,
+          fontWeight: answer ? FontWeight.normal : FontWeight.bold,
+        ),
+      );
+
+  List<TextSpan> _build(String text) {
+    final spans = <TextSpan>[];
+    var answerMode = false;
+    for (final line in text.split(RegExp(r'\r?\n'))) {
+      if (line.trim().isEmpty) {
+        spans.add(const TextSpan(text: '\n'));
+        continue;
+      }
+      final isQuestion = _qStart.hasMatch(line);
+      final inline = _ansInline.firstMatch(line);
+      if (inline != null) {
+        final before = line.substring(0, inline.start);
+        if (before.trim().isNotEmpty) {
+          spans.add(_span(before, isQuestion ? false : answerMode));
+        }
+        spans.add(_span(line.substring(inline.start), true));
+        answerMode = true;
+      } else if (_ansStart.hasMatch(line)) {
+        answerMode = true;
+        spans.add(_span(line, true));
+      } else {
+        if (isQuestion) answerMode = false;
+        spans.add(_span(line, answerMode));
+      }
+      spans.add(const TextSpan(text: '\n'));
+    }
+    return spans;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<TextSpan>>(
+      future: _future,
+      builder: (context, snap) {
+        if (snap.connectionState != ConnectionState.done) {
+          return const Padding(
+            padding: EdgeInsets.all(24),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (snap.hasError) {
+          debugPrint('Txt load error: ${snap.error}');
+          return Column(
+            children: [
+              const Text('Text load nahi hua.'),
+              TextButton(
+                onPressed: () => setState(() => _future = _load()),
+                child: const Text('Dobara try karein'),
+              ),
+            ],
+          );
+        }
+        return SelectableText.rich(
+          TextSpan(
+            style: const TextStyle(fontSize: 17, height: 1.6),
+            children: snap.data,
+          ),
+        );
+      },
+    );
+  }
+}
