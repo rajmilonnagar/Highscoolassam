@@ -711,4 +711,169 @@ class _AutoWebView extends StatefulWidget {
   });
 
   @override
-  State<_Auto
+  State<_AutoWebView> createState() => _AutoWebViewState();
+}
+
+class _AutoWebViewState extends State<_AutoWebView> {
+  static const double _maxH = 30000;
+
+  late final WebViewController _c;
+  late double _h = widget.minHeight;
+  bool _loading = true;
+
+  // Page ki unchai kuch baar naapkar Flutter ko bhejta hai (bar bar nahi,
+  // taaki 100vh wale pages ki unchai badhti na jaye).
+  static const String _js = '''
+(function(){
+  var e=document.documentElement,b=document.body;
+  e.style.overflow='hidden'; if(b){b.style.overflow='hidden';}
+  function send(){
+    var h=Math.max(e.scrollHeight,b?b.scrollHeight:0);
+    SizeChannel.postMessage(String(h));
+  }
+  send();
+  [300,1000,2500,5000].forEach(function(t){setTimeout(send,t);});
+})();
+''';
+
+  @override
+  void initState() {
+    super.initState();
+    _c = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(Colors.white)
+      ..addJavaScriptChannel(
+        'SizeChannel',
+        onMessageReceived: (m) {
+          final v = double.tryParse(m.message);
+          if (v == null || !mounted) return;
+          final nh = v.clamp(widget.minHeight, _maxH).toDouble();
+          if ((nh - _h).abs() > 2) setState(() => _h = nh);
+        },
+      )
+      ..setNavigationDelegate(NavigationDelegate(
+        onPageFinished: (_) {
+          if (mounted) setState(() => _loading = false);
+          _c.runJavaScript(_js);
+        },
+        onWebResourceError: (_) {
+          if (mounted) setState(() => _loading = false);
+        },
+      ))
+      ..loadRequest(Uri.parse(widget.url));
+  }
+
+  void _full() => Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => WebViewScreen(
+                title: widget.title.isEmpty ? 'File' : widget.title,
+                url: widget.url)),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: _h,
+      child: Stack(
+        children: [
+          // gestureRecognizers khali: vertical drag poore page ko jata hai
+          Positioned.fill(child: WebViewWidget(controller: _c)),
+          if (_loading)
+            Positioned.fill(
+              child: Container(
+                color: Colors.white,
+                child: Center(
+                    child: CircularProgressIndicator(color: AppDesign.brand)),
+              ),
+            ),
+          Positioned(
+            top: 4,
+            right: 4,
+            child: Material(
+              color: Colors.white70,
+              shape: const CircleBorder(),
+              child: IconButton(
+                tooltip: 'Poori screen',
+                icon: Icon(Icons.open_in_full, color: AppDesign.brand, size: 20),
+                onPressed: _full,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+
+// ---------------------------------------------------------------------------
+// Google Drive file: link me .txt nahi hota, isliye file ka type pehle
+// check karte hain. Txt ho to seedha text (poori chaudai, laal/neela),
+// warna PDF ki tarah Drive preview.
+// ---------------------------------------------------------------------------
+class _DriveFile extends StatefulWidget {
+  final String link;
+  final String title;
+  final double minHeight;
+  const _DriveFile({
+    required this.link,
+    required this.title,
+    required this.minHeight,
+  });
+
+  @override
+  State<_DriveFile> createState() => _DriveFileState();
+}
+
+class _DriveFileState extends State<_DriveFile> {
+  late final String _dl =
+      'https://drive.google.com/uc?export=download&id=${_driveId(widget.link)}';
+  late final Future<bool> _isTxtFuture = _probe();
+
+  // Sirf header padhta hai (poori file download nahi karta)
+  Future<bool> _probe() async {
+    final client = HttpClient();
+    try {
+      final req = await client.getUrl(Uri.parse(_dl));
+      final res = await req.close().timeout(const Duration(seconds: 15));
+      final mime = res.headers.contentType?.mimeType ?? '';
+      final disp = res.headers.value('content-disposition') ?? '';
+      return mime == 'text/plain' ||
+          RegExp(r'\.txt', caseSensitive: false).hasMatch(disp);
+    } catch (e) {
+      debugPrint('Drive probe error: $e');
+      return false;
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<bool>(
+      future: _isTxtFuture,
+      builder: (context, snap) {
+        if (snap.connectionState != ConnectionState.done) {
+          return SizedBox(
+            height: 160,
+            child: Center(
+                child: CircularProgressIndicator(color: AppDesign.brand)),
+          );
+        }
+        if (snap.data == true) {
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+            child: ColoredTxtView(url: _dl),
+          );
+        }
+        return _AutoWebView(
+          title: widget.title,
+          url: pdfUrl(widget.link),
+          minHeight: widget.minHeight,
+        );
+      },
+    );
+  }
+}
