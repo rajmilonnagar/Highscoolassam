@@ -489,4 +489,490 @@ class _ItemGridScreenState extends State<ItemGridScreen> {
   }
 
   @override
-  Widget build(Build
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.title),
+        backgroundColor: AppDesign.brand,
+        foregroundColor: Colors.white,
+        bottom: widget.subtitle == null
+            ? null
+            : PreferredSize(
+                preferredSize: const Size.fromHeight(30),
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Text(widget.subtitle!,
+                      style: const TextStyle(
+                          color: Colors.white70, fontSize: 12)),
+                ),
+              ),
+      ),
+      body: Column(
+        children: [
+          if (widget.showBanner) NoticeBanner(medium: widget.bannerMedium),
+          Expanded(
+            child: FutureBuilder<List<DbRow>>(
+              future: _future,
+              builder: (context, snap) {
+                if (snap.connectionState != ConnectionState.done) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snap.hasError) {
+                  return _Message(
+                    text: 'Data load nahi hua. Internet check karein.',
+                    onRetry: _retry,
+                  );
+                }
+                final items = snap.data ?? [];
+                if (items.isEmpty) {
+                  return _Message(
+                      text: 'Abhi yahan kuch nahi hai.', onRetry: _retry);
+                }
+                if (widget.listStyle) {
+                  return ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
+                    itemCount: items.length,
+                    itemBuilder: (context, i) => _listRow(context, i, items[i]),
+                  );
+                }
+                if (widget.sectionKey != null &&
+                    items.any((e) =>
+                        '${e[widget.sectionKey!] ?? ''}'.trim().isNotEmpty)) {
+                  return CustomScrollView(
+                    slivers: _sectionSlivers(context, items),
+                  );
+                }
+                return GridView.builder(
+                  padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
+                  itemCount: items.length,
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: widget.columns,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    childAspectRatio: widget.aspect,
+                  ),
+                  itemBuilder: (context, i) => _gridCard(context, items[i]),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Message extends StatelessWidget {
+  final String text;
+  final VoidCallback onRetry;
+  const _Message({required this.text, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(text, style: const TextStyle(color: kGrey, fontSize: 16)),
+          const SizedBox(height: 12),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+                backgroundColor: AppDesign.brand, foregroundColor: Colors.white),
+            onPressed: onRetry,
+            child: const Text('Dobara try karein'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 2. Medium -> 3. Class -> 4. Subject -> 5. Chapter -> 6. Content
+// ---------------------------------------------------------------------------
+
+class MediumSelectionScreen extends StatelessWidget {
+  final String deviceId;
+  final int remainingDays;
+  const MediumSelectionScreen(
+      {super.key, required this.deviceId, required this.remainingDays});
+
+  @override
+  Widget build(BuildContext context) {
+    final shortId = deviceId.length > 6 ? deviceId.substring(0, 6) : deviceId;
+    return ColorRowsScreen(
+      title: 'Select Medium',
+      subtitle: 'ID: $shortId... | Free Trial: $remainingDays Days Left',
+      fallbackIcon: Icons.school,
+      badge: 'symbol',
+      showBanner: true,
+      bgColor: AppDesign.bg,
+      headColor: AppDesign.brand,
+      titleLow: AppDesign.titleLow,
+      loader: () async => List<DbRow>.from(
+          await _db.from('mediums').select().order('sort_order', ascending: true)),
+      onTap: (context, medium) => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => ClassListScreen(medium: medium)),
+      ),
+    );
+  }
+}
+
+class ClassListScreen extends StatelessWidget {
+  final DbRow medium;
+  const ClassListScreen({super.key, required this.medium});
+
+  @override
+  Widget build(BuildContext context) {
+    Future<List<DbRow>> loader() async => List<DbRow>.from(
+        await _db.from('classes').select().order('sort_order', ascending: true));
+    void open(BuildContext context, DbRow cls) => Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (_) => SubjectListScreen(medium: medium, cls: cls)),
+        );
+
+    // Admin ne medium par card style chuna ho to wahi, warna purana grid
+    final st = _styleOf(medium, def: '');
+    if (_isGridStyle(st)) {
+      return SubjectGridScreen(
+        title: '${medium['name']} - Classes',
+        fallbackIcon: Icons.class_,
+        style: st,
+        columns: _colsOf(medium, st),
+        sectionKey: 'section',
+        top: NoticeBanner(medium: medium),
+        loader: loader,
+        onTap: open,
+      );
+    }
+    return ItemGridScreen(
+      title: '${medium['name']} - Classes',
+      fallbackIcon: Icons.class_,
+      aspect: 1.1,
+      showBanner: true,
+      bannerMedium: medium,
+      sectionKey: 'section',
+      loader: () async => List<DbRow>.from(
+          await _db.from('classes').select().order('sort_order', ascending: true)),
+      onTap: (context, cls) => Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => SubjectListScreen(medium: medium, cls: cls)),
+      ),
+    );
+  }
+}
+
+class SubjectListScreen extends StatelessWidget {
+  final DbRow medium;
+  final DbRow cls;
+  const SubjectListScreen({super.key, required this.medium, required this.cls});
+
+  @override
+  Widget build(BuildContext context) {
+    return SubjectGridScreen(
+      title: '${cls['name']} - Subjects',
+      fallbackIcon: Icons.book,
+      // Admin se (classes table): card ka style aur ek line me kitne card
+      style: _gridStyleOr(cls, 'card'),
+      columns: _colsOf(cls, _gridStyleOr(cls, 'card')),
+      sectionKey: 'section',
+      loader: () async {
+        final subs = List<DbRow>.from(await _db
+            .from('subjects')
+            .select()
+            .eq('medium_id', medium['id'])
+            .eq('class_id', cls['id'])
+            .order('sort_order', ascending: true));
+        // Har subject ke neeche "N Chapters" (ginti na mile to waisa hi chhod do)
+        if (subs.isNotEmpty) {
+          try {
+            final ch = await _db
+                .from('chapters')
+                .select('subject_id')
+                .inFilter('subject_id', subs.map((s) => s['id']).toList())
+                .isFilter('parent_id', null);
+            final counts = <dynamic, int>{};
+            for (final c in ch) {
+              counts[c['subject_id']] = (counts[c['subject_id']] ?? 0) + 1;
+            }
+            for (final s in subs) {
+              final n = counts[s['id']] ?? 0;
+              if (n > 0) s['subtitle'] = '$n Chapters';
+            }
+          } catch (_) {}
+        }
+        return subs;
+      },
+      onTap: (context, subject) => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => ChapterListScreen(subject: subject)),
+      ),
+    );
+  }
+}
+
+/// Subject: ek line me 3 card, upar icon / photo, neeche naam
+class SubjectGridScreen extends StatefulWidget {
+  final String title;
+  final Future<List<DbRow>> Function() loader;
+  final void Function(BuildContext context, DbRow item) onTap;
+  final IconData fallbackIcon;
+  final String style; // 'card' (chhota icon card) | 'photo' (badi photo) | 'list' (ek ke neeche ek)
+  final int columns; // ek line me kitne card (list me hamesha 1)
+  final String? sectionKey; // jaise 'section': Compulsory / Extra headers
+  final Widget? top; // list ke upar koi widget (jaise notice banner)
+  const SubjectGridScreen({
+    super.key,
+    required this.title,
+    required this.loader,
+    required this.onTap,
+    this.fallbackIcon = Icons.book,
+    this.style = 'card',
+    this.columns = 3,
+    this.sectionKey,
+    this.top,
+  });
+
+  @override
+  State<SubjectGridScreen> createState() => _SubjectGridScreenState();
+}
+
+class _SubjectGridScreenState extends State<SubjectGridScreen> {
+  late Future<List<DbRow>> _future = widget.loader();
+
+  // (halka rang, gehra rang) har card ka alag
+  static const List<List<Color>> _tints = [
+    [Color(0xFFF3E8FD), Color(0xFF7E57C2)],
+    [Color(0xFFE8F5E9), Color(0xFF2E7D32)],
+    [Color(0xFFE3F2FD), Color(0xFF1565C0)],
+    [Color(0xFFFFF3E0), Color(0xFFEF6C00)],
+    [Color(0xFFFDECEA), Color(0xFFC62828)],
+    [Color(0xFFFFF8E1), Color(0xFFF9A825)],
+    [Color(0xFFE0F7FA), Color(0xFF00838F)],
+  ];
+
+  void _retry() => setState(() => _future = widget.loader());
+
+  Widget _card(BuildContext context, int i, DbRow item) {
+    final t = _tints[i % _tints.length];
+    final img = imageUrl(item['image_url'] as String?);
+    final sub = '${item['subtitle'] ?? ''}'.trim();
+    final icon = Icon(widget.fallbackIcon, size: 30, color: t[1]);
+    return Card(
+      color: AppDesign.cardBase,
+      surfaceTintColor: Colors.transparent,
+      elevation: 3,
+      shadowColor: Colors.black26,
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(26),
+        onTap: () => widget.onTap(context, item),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 12, 8, 8),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                    color: t[0], borderRadius: BorderRadius.circular(20)),
+                child: img.isEmpty
+                    ? Center(child: icon)
+                    : ClipRRect(
+                        borderRadius: BorderRadius.circular(20),
+                        child: CachedNetworkImage(
+                          imageUrl: img,
+                          fit: BoxFit.cover,
+                          placeholder: (_, __) => Center(child: icon),
+                          errorWidget: (_, __, ___) => Center(child: icon),
+                        ),
+                      ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                '${item['name'] ?? ''}',
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1F2937),
+                    height: 1.25),
+              ),
+              if (sub.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 3),
+                  child: Text(sub,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 11, color: kGrey)),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Badi photo wala card: upar photo, neeche naam
+  Widget _photoCard(BuildContext context, int i, DbRow item) {
+    final t = _tints[i % _tints.length];
+    final img = imageUrl(item['image_url'] as String?);
+    final sub = '${item['subtitle'] ?? ''}'.trim();
+    final fallback = Container(
+      color: t[0],
+      child: Center(child: Icon(widget.fallbackIcon, size: 40, color: t[1])),
+    );
+    return Card(
+      color: AppDesign.cardBase,
+      surfaceTintColor: Colors.transparent,
+      elevation: 3,
+      shadowColor: Colors.black26,
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      child: InkWell(
+        onTap: () => widget.onTap(context, item),
+        child: Column(
+          children: [
+            Expanded(
+              child: SizedBox(
+                width: double.infinity,
+                child: img.isEmpty
+                    ? fallback
+                    : CachedNetworkImage(
+                        imageUrl: img,
+                        fit: BoxFit.cover,
+                        placeholder: (_, __) => fallback,
+                        errorWidget: (_, __, ___) => fallback,
+                      ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                children: [
+                  Text('${item['name'] ?? ''}',
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF1F2937))),
+                  if (sub.isNotEmpty)
+                    Text(sub,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 11, color: kGrey)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // List row: number + icon/photo + naam (+ chapters)
+  Widget _listRow(BuildContext context, int i, DbRow item) {
+    final t = _tints[i % _tints.length];
+    final img = imageUrl(item['image_url'] as String?);
+    final sub = '${item['subtitle'] ?? ''}'.trim();
+    final icon = Icon(widget.fallbackIcon, size: 26, color: t[1]);
+    return Card(
+      color: AppDesign.cardBase,
+      surfaceTintColor: Colors.transparent,
+      elevation: 2,
+      shadowColor: Colors.black26,
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      child: InkWell(
+        onTap: () => widget.onTap(context, item),
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 28,
+                child: Text('${i + 1}',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 16,
+                        color: AppDesign.brand)),
+              ),
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                    color: t[0], borderRadius: BorderRadius.circular(16)),
+                child: img.isEmpty
+                    ? Center(child: icon)
+                    : ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: CachedNetworkImage(
+                          imageUrl: img,
+                          fit: BoxFit.cover,
+                          placeholder: (_, __) => Center(child: icon),
+                          errorWidget: (_, __, ___) => Center(child: icon),
+                        ),
+                      ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('${item['name'] ?? ''}',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF1F2937))),
+                    if (sub.isNotEmpty)
+                      Text(sub,
+                          style:
+                              const TextStyle(fontSize: 12, color: kGrey)),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: Color(0xFF1F2937)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _cardFor(BuildContext context, int i, DbRow item) {
+    switch (widget.style) {
+      case 'photo':
+        return _photoCard(context, i, item);
+      case 'list':
+        return _listRow(context, i, item);
+      default:
+        return _card(context, i, item);
+    }
+  }
+
+  bool get _isList => widget.style == 'list';
+
+  int get _cols => _isList ? 1 : widget.columns;
+
+  double get _aspect {
+    if (widget.style == 'photo') {
+      return const {1: 1.5, 2: 0.9, 3: 0.78, 4: 0.66}[_cols] ?? 0.9;
+    }
+    return const {1: 3.2, 2: 1.0, 3: 0.82, 4: 0.68}[_cols] ?? 0.82;
+  }
+
+  Widget _section
