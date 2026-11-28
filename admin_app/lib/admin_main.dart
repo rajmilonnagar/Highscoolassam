@@ -785,4 +785,218 @@ class _TableScreenState extends State<TableScreen> {
                                           ],
                                         ),
                                         body: SafeArea(
-                                          child: Padding
+                                          child: Padding(
+                                            padding: const EdgeInsets.all(12),
+                                            child: TextField(
+                                              controller: ctrls[f.key],
+                                              autofocus: true,
+                                              expands: true,
+                                              minLines: null,
+                                              maxLines: null,
+                                              textAlignVertical:
+                                                  TextAlignVertical.top,
+                                              keyboardType:
+                                                  TextInputType.multiline,
+                                              decoration: const InputDecoration(
+                                                  border:
+                                                      OutlineInputBorder()),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                  setS(() {});
+                                },
+                                child: InputDecorator(
+                                  decoration: InputDecoration(
+                                    labelText: f.label,
+                                    border: const OutlineInputBorder(),
+                                    suffixIcon:
+                                        const Icon(Icons.open_in_full),
+                                  ),
+                                  child: Text(
+                                    ctrls[f.key]!.text.isEmpty
+                                        ? 'Dabakar likhein...'
+                                        : ctrls[f.key]!.text,
+                                    maxLines: 4,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              )
+                        : f.options != null
+                            ? DropdownButtonFormField<String>(
+                                value: ctrls[f.key]!.text,
+                                decoration: InputDecoration(
+                                    labelText: f.label,
+                                    border: const OutlineInputBorder()),
+                                items: [
+                                  for (final o in f.options!)
+                                    DropdownMenuItem(value: o, child: Text(o))
+                                ],
+                                onChanged: (v) => ctrls[f.key]!.text = v ?? '',
+                              )
+                            : TextField(
+                                controller: ctrls[f.key],
+                                keyboardType: f.multiline
+                                    ? TextInputType.multiline
+                                    : f.number
+                                        ? TextInputType.number
+                                        : TextInputType.text,
+                                minLines: f.multiline ? 8 : 1,
+                                maxLines: f.multiline ? null : 3,
+                                decoration: InputDecoration(
+                                    labelText: f.label,
+                                    alignLabelWithHint: f.multiline,
+                                    border: const OutlineInputBorder()),
+                              ),
+                  ),
+                const SizedBox(height: 24),
+                FilledButton.icon(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  icon: const Icon(Icons.check),
+                  label: const Text('Save'),
+                ),
+              ],
+            ),
+          ),
+        )),
+      ),
+    );
+    if (ok != true) return;
+
+    final vals = <String, dynamic>{};
+    for (final f in widget.fields) {
+      if (!shown(f)) continue;
+      final t = ctrls[f.key]!.text.trim();
+      if (f.number) {
+        vals[f.key] = int.tryParse(t) ?? 0;
+      } else if (f.fromTable != null) {
+        vals[f.key] = t.isEmpty ? null : (int.tryParse(t) ?? t);
+        final sel = (choices[f.key] ?? <DbRow>[]).where((r) => '${r['id']}' == t);
+        if (sel.isNotEmpty) {
+          f.copy.forEach((from, to) => vals[to] = sel.first[from]);
+        }
+      } else if (f.options != null &&
+          (t.isEmpty || t == 'default' || t == 'auto')) {
+        vals[f.key] = null; // default / auto = khali, student app khud tay karega
+      } else if (f.key == 'child_columns') {
+        vals[f.key] = int.tryParse(t);
+      } else {
+        vals[f.key] = t.isEmpty ? null : t;
+      }
+    }
+    if (widget.modeSelect) {
+      final shownKeys = {
+        for (final f in widget.fields)
+          if (shown(f)) f.key
+      };
+      for (final f in widget.fields) {
+        if (!shownKeys.contains(f.key)) vals[f.key] = null;
+      }
+      vals['type'] = mode == 'single_video'
+          ? 'video'
+          : mode == 'text_file'
+              ? 'pdf'
+              : 'qa';
+    }
+    if (widget.modeSelect && vals[widget.titleKey] == null) {
+      vals[widget.titleKey] = '';
+    }
+    if (vals[widget.titleKey] == null) {
+      _msg('Naam / title khali nahi ho sakta');
+      return;
+    }
+
+    try {
+      if (row == null) {
+        final cur = await _future;
+        var mx = 0;
+        for (final r in cur) {
+          final v = (num.tryParse('${r['sort_order']}') ?? 0).toInt();
+          if (v > mx) mx = v;
+        }
+        await db
+            .from(widget.table)
+            .insert({'sort_order': mx + 1, ...widget.filter, ...vals});
+      } else {
+        await db.from(widget.table).update(vals).eq('id', row['id']);
+      }
+      _msg('Save ho gaya');
+      _refresh();
+    } catch (e) {
+      _msg('Save nahi hua: $e');
+    }
+  }
+
+  Future<void> _bulkAdd() async {
+    final ctrl = TextEditingController();
+    final ok = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute<bool>(
+        fullscreenDialog: true,
+        builder: (ctx) => Scaffold(
+          appBar: AppBar(
+            leading: IconButton(
+              icon: const Icon(Icons.close),
+              onPressed: () => Navigator.pop(ctx, false),
+            ),
+            title: const Text('Ek saath kai add karein'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Add'),
+              ),
+            ],
+          ),
+          body: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  const Text(
+                      'Har naam alag line me likhein ya paste karein. Order apne aap 1,2,3... lagega.'),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: ctrl,
+                      expands: true,
+                      minLines: null,
+                      maxLines: null,
+                      textAlignVertical: TextAlignVertical.top,
+                      keyboardType: TextInputType.multiline,
+                      decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                          hintText: 'Pehla naam\nDusra naam\nTeesra naam'),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: const Text('Add'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final names = ctrl.text
+        .split('\n')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    if (names.isEmpty) return;
+    try {
+      final list = await _future;
+      var n = list.length;
+      final rows = <Map<String, dynamic>>[
+        for (final name in names)
+          {...widget.filter, widget.titleKey: name, 'sort_order': ++n}
+      ];
+      await db.from(widget.table).insert(rows);
