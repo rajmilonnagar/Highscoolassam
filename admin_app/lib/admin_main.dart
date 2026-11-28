@@ -582,4 +582,207 @@ class _TableScreenState extends State<TableScreen> {
           final cur = _chipSel;
           if (cur != null &&
               cur != '_none' &&
-              _chips.any((c) => '${c['
+              _chips.any((c) => '${c['id']}' == cur)) {
+            ctrls[f.key]!.text = cur;
+          }
+        }
+      }
+    }
+    if (!mounted) return;
+
+    // Card ka prakar: single / double / text, aur uska mode
+    String? kind;
+    String? mode;
+    if (widget.modeSelect) {
+      if (row == null) {
+        kind = await Navigator.push<String>(
+          context,
+          MaterialPageRoute<String>(builder: (_) => const _KindChooser()),
+        );
+        if (kind == null || !mounted) return;
+        mode = kind == 'single'
+            ? 'single_photo'
+            : kind == 'double'
+                ? 'double'
+                : 'text_keyboard';
+      } else {
+        final t = '${row['type'] ?? ''}';
+        final hasImg = '${row['image_url'] ?? ''}'.isNotEmpty;
+        final hasImg2 = '${row['image_url2'] ?? ''}'.isNotEmpty;
+        final hasBody = '${row['body'] ?? ''}'.isNotEmpty;
+        if (t == 'video') {
+          kind = 'single';
+          mode = 'single_video';
+        } else if (t == 'pdf') {
+          kind = 'text';
+          mode = 'text_file';
+        } else if (hasImg2) {
+          kind = 'double';
+          mode = 'double';
+        } else if (hasBody && !hasImg) {
+          kind = 'text';
+          mode = 'text_keyboard';
+        } else {
+          kind = 'single';
+          mode = 'single_photo';
+        }
+      }
+    }
+
+    // Fields kaun se dikhen: card mode se (ya category ke type se)
+    String? typeNow() {
+      if (widget.modeSelect) return mode;
+      for (final f in widget.fields) {
+        if (f.fromTable != null && f.copy.containsKey('type')) {
+          final id = ctrls[f.key]!.text;
+          final m =
+              (choices[f.key] ?? <DbRow>[]).where((r) => '${r['id']}' == id);
+          if (m.isNotEmpty) return '${m.first['type']}';
+        }
+      }
+      return null;
+    }
+
+    bool shown(F f) {
+      final t = typeNow();
+      return f.types == null || t == null || f.types!.contains(t);
+    }
+
+    // Naya add karte waqt chip wali category apne aap lagti hai, dropdown nahi dikhta
+    final lockCat = row == null &&
+        widget.chipsTable != null &&
+        _chipSel != '_none' &&
+        (ctrls[widget.chipsKey]?.text ?? '').isNotEmpty;
+    String lockName() {
+      final id = ctrls[widget.chipsKey]!.text;
+      final m = _chips.where((c) => '${c['id']}' == id);
+      return m.isEmpty ? '' : '${m.first[widget.chipsLabelKey]}';
+    }
+
+    final ok = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute<bool>(
+        fullscreenDialog: true,
+        builder: (ctx0) => StatefulBuilder(builder: (ctx, setS) => Scaffold(
+          appBar: AppBar(
+            leading: IconButton(
+              icon: const Icon(Icons.close),
+              onPressed: () => Navigator.pop(ctx, false),
+            ),
+            title: Text(row != null
+                ? 'Badlein'
+                : kind == 'single'
+                    ? 'Single card'
+                    : kind == 'double'
+                        ? 'Double card'
+                        : kind == 'text'
+                            ? 'Plain text'
+                            : 'Naya add karein'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Save'),
+              ),
+            ],
+          ),
+          body: SafeArea(
+            child: ListView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+              children: [
+                if (kind == 'single')
+                  Padding(
+                    padding: const EdgeInsets.only(top: 14),
+                    child: SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(
+                            value: 'single_photo',
+                            label: Text('Photo'),
+                            icon: Icon(Icons.image_outlined)),
+                        ButtonSegment(
+                            value: 'single_video',
+                            label: Text('Video'),
+                            icon: Icon(Icons.play_circle_outline)),
+                      ],
+                      selected: {mode ?? 'single_photo'},
+                      onSelectionChanged: (v) {
+                        mode = v.first;
+                        setS(() {});
+                      },
+                    ),
+                  ),
+                if (kind == 'text')
+                  Padding(
+                    padding: const EdgeInsets.only(top: 14),
+                    child: SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(
+                            value: 'text_keyboard',
+                            label: Text('Likhna'),
+                            icon: Icon(Icons.keyboard_outlined)),
+                        ButtonSegment(
+                            value: 'text_file',
+                            label: Text('.txt link'),
+                            icon: Icon(Icons.link)),
+                      ],
+                      selected: {mode ?? 'text_keyboard'},
+                      onSelectionChanged: (v) {
+                        mode = v.first;
+                        setS(() {});
+                      },
+                    ),
+                  ),
+                for (final f in widget.fields)
+                  if (shown(f))
+                  Padding(
+                    padding: const EdgeInsets.only(top: 14),
+                    child: lockCat && f.key == widget.chipsKey
+                        ? InputDecorator(
+                            decoration: InputDecoration(
+                                labelText: f.label,
+                                border: const OutlineInputBorder()),
+                            child: Text(lockName()),
+                          )
+                        : f.fromTable != null
+                        ? DropdownButtonFormField<String>(
+                            isExpanded: true,
+                            value: (choices[f.key] ?? <DbRow>[]).any(
+                                    (r) => '${r['id']}' == ctrls[f.key]!.text)
+                                ? ctrls[f.key]!.text
+                                : null,
+                            decoration: InputDecoration(
+                                labelText: f.label,
+                                border: const OutlineInputBorder()),
+                            items: [
+                              for (final r in choices[f.key] ?? <DbRow>[])
+                                DropdownMenuItem(
+                                    value: '${r['id']}',
+                                    child: Text('${r[f.labelKey]}'))
+                            ],
+                            onChanged: (v) {
+                              ctrls[f.key]!.text = v ?? '';
+                              setS(() {});
+                            },
+                          )
+                        : f.multiline
+                            ? InkWell(
+                                onTap: () async {
+                                  await Navigator.push(
+                                    ctx,
+                                    MaterialPageRoute<void>(
+                                      fullscreenDialog: true,
+                                      builder: (c2) => Scaffold(
+                                        appBar: AppBar(
+                                          title: Text(f.label,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () =>
+                                                  Navigator.pop(c2),
+                                              child: const Text('Done'),
+                                            ),
+                                          ],
+                                        ),
+                                        body: SafeArea(
+                                          child: Padding
