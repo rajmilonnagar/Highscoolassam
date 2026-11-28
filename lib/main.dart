@@ -40,7 +40,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Supabase initialize karein (apni credentials yahan dalein)
   await Supabase.initialize(
-    url: 'PASTE_SUPABASE_URL_HERE',
+    url: 'https://ymiakzzapyhybtoumtbx.supabase.co',
     anonKey: 'PASTE_SUPABASE_ANON_KEY_HERE',
   );
   await AppDesign.load();
