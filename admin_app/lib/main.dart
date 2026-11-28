@@ -1,4 +1,4 @@
-seimport 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'admin_category_screens.dart';
 import 'admin_notice_screen.dart';
