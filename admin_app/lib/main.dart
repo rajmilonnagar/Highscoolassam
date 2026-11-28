@@ -582,4 +582,337 @@ class _TableScreenState extends State<TableScreen> {
           final cur = _chipSel;
           if (cur != null &&
               cur != '_none' &&
-              _chips.any((c) => '${c['
+              _chips.any((c) => '${c['id']}' == cur)) {
+            ctrls[f.key]!.text = cur;
+          }
+        }
+      }
+    }
+    if (!mounted) return;
+
+    // Card ka prakar: single / double / text, aur uska mode
+    String? kind;
+    String? mode;
+    if (widget.modeSelect) {
+      if (row == null) {
+        kind = await Navigator.push<String>(
+          context,
+          MaterialPageRoute<String>(builder: (_) => const _KindChooser()),
+        );
+        if (kind == null || !mounted) return;
+        mode = kind == 'single'
+            ? 'single_photo'
+            : kind == 'double'
+                ? 'double'
+                : 'text_keyboard';
+      } else {
+        final t = '${row['type'] ?? ''}';
+        final hasImg = '${row['image_url'] ?? ''}'.isNotEmpty;
+        final hasImg2 = '${row['image_url2'] ?? ''}'.isNotEmpty;
+        final hasBody = '${row['body'] ?? ''}'.isNotEmpty;
+        if (t == 'video') {
+          kind = 'single';
+          mode = 'single_video';
+        } else if (t == 'pdf') {
+          kind = 'text';
+          mode = 'text_file';
+        } else if (hasImg2) {
+          kind = 'double';
+          mode = 'double';
+        } else if (hasBody && !hasImg) {
+          kind = 'text';
+          mode = 'text_keyboard';
+        } else {
+          kind = 'single';
+          mode = 'single_photo';
+        }
+      }
+    }
+
+    // Fields kaun se dikhen: card mode se (ya category ke type se)
+    String? typeNow() {
+      if (widget.modeSelect) return mode;
+      for (final f in widget.fields) {
+        if (f.fromTable != null && f.copy.containsKey('type')) {
+          final id = ctrls[f.key]!.text;
+          final m =
+              (choices[f.key] ?? <DbRow>[]).where((r) => '${r['id']}' == id);
+          if (m.isNotEmpty) return '${m.first['type']}';
+        }
+      }
+      return null;
+    }
+
+    bool shown(F f) {
+      final t = typeNow();
+      return f.types == null || t == null || f.types!.contains(t);
+    }
+
+    // Naya add karte waqt chip wali category apne aap lagti hai, dropdown nahi dikhta
+    final lockCat = row == null &&
+        widget.chipsTable != null &&
+        _chipSel != '_none' &&
+        (ctrls[widget.chipsKey]?.text ?? '').isNotEmpty;
+    String lockName() {
+      final id = ctrls[widget.chipsKey]!.text;
+      final m = _chips.where((c) => '${c['id']}' == id);
+      return m.isEmpty ? '' : '${m.first[widget.chipsLabelKey]}';
+    }
+
+    final ok = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute<bool>(
+        fullscreenDialog: true,
+        builder: (ctx0) => StatefulBuilder(builder: (ctx, setS) => Scaffold(
+          appBar: AppBar(
+            leading: IconButton(
+              icon: const Icon(Icons.close),
+              onPressed: () => Navigator.pop(ctx, false),
+            ),
+            title: Text(row != null
+                ? 'Badlein'
+                : kind == 'single'
+                    ? 'Single card'
+                    : kind == 'double'
+                        ? 'Double card'
+                        : kind == 'text'
+                            ? 'Plain text'
+                            : 'Naya add karein'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Save'),
+              ),
+            ],
+          ),
+          body: SafeArea(
+            child: ListView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+              children: [
+                if (kind == 'single')
+                  Padding(
+                    padding: const EdgeInsets.only(top: 14),
+                    child: SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(
+                            value: 'single_photo',
+                            label: Text('Photo'),
+                            icon: Icon(Icons.image_outlined)),
+                        ButtonSegment(
+                            value: 'single_video',
+                            label: Text('Video'),
+                            icon: Icon(Icons.play_circle_outline)),
+                      ],
+                      selected: {mode ?? 'single_photo'},
+                      onSelectionChanged: (v) {
+                        mode = v.first;
+                        setS(() {});
+                      },
+                    ),
+                  ),
+                if (kind == 'text')
+                  Padding(
+                    padding: const EdgeInsets.only(top: 14),
+                    child: SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(
+                            value: 'text_keyboard',
+                            label: Text('Likhna'),
+                            icon: Icon(Icons.keyboard_outlined)),
+                        ButtonSegment(
+                            value: 'text_file',
+                            label: Text('.txt link'),
+                            icon: Icon(Icons.link)),
+                      ],
+                      selected: {mode ?? 'text_keyboard'},
+                      onSelectionChanged: (v) {
+                        mode = v.first;
+                        setS(() {});
+                      },
+                    ),
+                  ),
+                for (final f in widget.fields)
+                  if (shown(f))
+                  Padding(
+                    padding: const EdgeInsets.only(top: 14),
+                    child: lockCat && f.key == widget.chipsKey
+                        ? InputDecorator(
+                            decoration: InputDecoration(
+                                labelText: f.label,
+                                border: const OutlineInputBorder()),
+                            child: Text(lockName()),
+                          )
+                        : f.fromTable != null
+                        ? DropdownButtonFormField<String>(
+                            isExpanded: true,
+                            value: (choices[f.key] ?? <DbRow>[]).any(
+                                    (r) => '${r['id']}' == ctrls[f.key]!.text)
+                                ? ctrls[f.key]!.text
+                                : null,
+                            decoration: InputDecoration(
+                                labelText: f.label,
+                                border: const OutlineInputBorder()),
+                            items: [
+                              for (final r in choices[f.key] ?? <DbRow>[])
+                                DropdownMenuItem(
+                                    value: '${r['id']}',
+                                    child: Text('${r[f.labelKey]}'))
+                            ],
+                            onChanged: (v) {
+                              ctrls[f.key]!.text = v ?? '';
+                              setS(() {});
+                            },
+                          )
+                        : f.multiline
+                            ? InkWell(
+                                onTap: () async {
+                                  await Navigator.push(
+                                    ctx,
+                                    MaterialPageRoute<void>(
+                                      fullscreenDialog: true,
+                                      builder: (c2) => Scaffold(
+                                        appBar: AppBar(
+                                          title: Text(f.label,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () =>
+                                                  Navigator.pop(c2),
+                                              child: const Text('Done'),
+                                            ),
+                                          ],
+                                        ),
+                                        body: SafeArea(
+                                          child: Padding(
+                                            padding: const EdgeInsets.all(12),
+                                            child: TextField(
+                                              controller: ctrls[f.key],
+                                              autofocus: true,
+                                              expands: true,
+                                              minLines: null,
+                                              maxLines: null,
+                                              textAlignVertical:
+                                                  TextAlignVertical.top,
+                                              keyboardType:
+                                                  TextInputType.multiline,
+                                              decoration: const InputDecoration(
+                                                  border:
+                                                      OutlineInputBorder()),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                  setS(() {});
+                                },
+                                child: InputDecorator(
+                                  decoration: InputDecoration(
+                                    labelText: f.label,
+                                    border: const OutlineInputBorder(),
+                                    suffixIcon:
+                                        const Icon(Icons.open_in_full),
+                                  ),
+                                  child: Text(
+                                    ctrls[f.key]!.text.isEmpty
+                                        ? 'Dabakar likhein...'
+                                        : ctrls[f.key]!.text,
+                                    maxLines: 4,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              )
+                        : f.options != null
+                            ? DropdownButtonFormField<String>(
+                                value: ctrls[f.key]!.text,
+                                decoration: InputDecoration(
+                                    labelText: f.label,
+                                    border: const OutlineInputBorder()),
+                                items: [
+                                  for (final o in f.options!)
+                                    DropdownMenuItem(value: o, child: Text(o))
+                                ],
+                                onChanged: (v) => ctrls[f.key]!.text = v ?? '',
+                              )
+                            : TextField(
+                                controller: ctrls[f.key],
+                                keyboardType: f.multiline
+                                    ? TextInputType.multiline
+                                    : f.number
+                                        ? TextInputType.number
+                                        : TextInputType.text,
+                                minLines: f.multiline ? 8 : 1,
+                                maxLines: f.multiline ? null : 3,
+                                decoration: InputDecoration(
+                                    labelText: f.label,
+                                    alignLabelWithHint: f.multiline,
+                                    border: const OutlineInputBorder()),
+                              ),
+                  ),
+                const SizedBox(height: 24),
+                FilledButton.icon(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  icon: const Icon(Icons.check),
+                  label: const Text('Save'),
+                ),
+              ],
+            ),
+          ),
+        )),
+      ),
+    );
+    if (ok != true) return;
+
+    final vals = <String, dynamic>{};
+    for (final f in widget.fields) {
+      if (!shown(f)) continue;
+      final t = ctrls[f.key]!.text.trim();
+      if (f.number) {
+        vals[f.key] = int.tryParse(t) ?? 0;
+      } else if (f.fromTable != null) {
+        vals[f.key] = t.isEmpty ? null : (int.tryParse(t) ?? t);
+        final sel = (choices[f.key] ?? <DbRow>[]).where((r) => '${r['id']}' == t);
+        if (sel.isNotEmpty) {
+          f.copy.forEach((from, to) => vals[to] = sel.first[from]);
+        }
+      } else if (f.options != null &&
+          (t.isEmpty || t == 'default' || t == 'auto')) {
+        vals[f.key] = null; // default / auto = khali, student app khud tay karega
+      } else if (f.key == 'child_columns') {
+        vals[f.key] = int.tryParse(t);
+      } else {
+        vals[f.key] = t.isEmpty ? null : t;
+      }
+    }
+    if (widget.modeSelect) {
+      final shownKeys = {
+        for (final f in widget.fields)
+          if (shown(f)) f.key
+      };
+      for (final f in widget.fields) {
+        if (!shownKeys.contains(f.key)) vals[f.key] = null;
+      }
+      vals['type'] = mode == 'single_video'
+          ? 'video'
+          : mode == 'text_file'
+              ? 'pdf'
+              : 'qa';
+    }
+    if (widget.modeSelect && vals[widget.titleKey] == null) {
+      vals[widget.titleKey] = '';
+    }
+    if (vals[widget.titleKey] == null) {
+      _msg('Naam / title khali nahi ho sakta');
+      return;
+    }
+
+    try {
+      if (row == null) {
+        final cur = await _future;
+        var mx = 0;
+        for (final r in cur) {
+          final v = (num.tryParse('${r['sort_order']}') ?? 0).toInt();
+          if (v > mx) mx = v;
+        }
